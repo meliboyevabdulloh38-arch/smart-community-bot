@@ -44,7 +44,7 @@ AI_API_URL = os.environ.get("AI_API_URL", "").strip()
 AI_API_KEY = os.environ.get("AI_API_KEY", "").strip()
 AI_MODEL = os.environ.get("AI_MODEL", "").strip()
 DB_PATH = Path(os.environ.get("BOT_DB_PATH", "/tmp/smart-community-bot.sqlite3"))
-WEBHOOK_PATH = "/telegram-webhook"
+WEBHOOK_PATH = f"/telegram-webhook/{hashlib.sha256(WEBHOOK_SECRET.encode('utf-8')).hexdigest()[:24]}"
 
 app = FastAPI(title="Smart Community Bot")
 update_lock = asyncio.Lock()
@@ -570,10 +570,6 @@ async def health() -> dict[str, Any]:
 async def telegram_webhook(request: Request) -> dict[str, Any]:
     if not BOT_TOKEN:
         return {"ok": False, "error": "BOT_TOKEN is not configured"}
-    received_secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
-    if WEBHOOK_SECRET and received_secret != WEBHOOK_SECRET:
-        logger.warning("Rejected webhook request with invalid secret")
-        return {"ok": False, "error": "unauthorized"}
     try:
         payload = await request.json()
         update = Update.de_json(payload, telegram_app.bot)
@@ -594,7 +590,6 @@ async def startup() -> None:
         if PUBLIC_URL:
             await telegram_app.bot.set_webhook(
                 url=f"{PUBLIC_URL}{WEBHOOK_PATH}",
-                secret_token=WEBHOOK_SECRET if WEBHOOK_SECRET and WEBHOOK_SECRET != "change-me" else None,
                 drop_pending_updates=False,
             )
         logger.info("Telegram webhook configured.")
