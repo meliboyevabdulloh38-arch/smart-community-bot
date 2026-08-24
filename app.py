@@ -48,6 +48,7 @@ WEBHOOK_PATH = f"/telegram-webhook/{hashlib.sha256(WEBHOOK_SECRET.encode('utf-8'
 
 app = FastAPI(title="Smart Community Bot")
 update_lock = asyncio.Lock()
+telegram_ready = False
 
 if not BOT_TOKEN:
     logger.warning("BOT_TOKEN is not set. Add it in Render Environment Variables.")
@@ -570,7 +571,11 @@ async def health() -> dict[str, Any]:
 async def telegram_webhook(request: Request) -> dict[str, Any]:
     if not BOT_TOKEN:
         return {"ok": False, "error": "BOT_TOKEN is not configured"}
+    global telegram_ready
     try:
+        if not telegram_ready:
+            await telegram_app.initialize()
+            telegram_ready = True
         payload = await request.json()
         update = Update.de_json(payload, telegram_app.bot)
         if update is None:
@@ -585,17 +590,26 @@ async def telegram_webhook(request: Request) -> dict[str, Any]:
 
 @app.on_event("startup")
 async def startup() -> None:
-    if BOT_TOKEN:
+    global telegram_ready
+    if not BOT_TOKEN:
+        return
+    try:
         await telegram_app.initialize()
+        telegram_ready = True
         if PUBLIC_URL:
             await telegram_app.bot.set_webhook(
                 url=f"{PUBLIC_URL}{WEBHOOK_PATH}",
                 drop_pending_updates=False,
             )
-        logger.info("Telegram webhook configured.")
+        logger.info("Telegram webhook configured at %s", WEBHOOK_PATH)
+    except Exception as exc:
+        telegram_ready = False
+        logger.exception("Telegram startup configuration failed; health service remains online: %s", exc)
 
 
 @app.on_event("shutdown")
 async def shutdown() -> None:
-    if BOT_TOKEN:
+    global telegram_ready
+    if BOT_TOKEN and telegram_ready:
         await telegram_app.shutdown()
+        telegram_ready = False
