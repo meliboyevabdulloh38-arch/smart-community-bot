@@ -12,9 +12,11 @@ import asyncio
 import hashlib
 import json
 import logging
+import mimetypes
 import os
 import re
 import sqlite3
+import tempfile
 import time
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
@@ -43,6 +45,11 @@ PUBLIC_URL = os.environ.get("RENDER_EXTERNAL_URL", "").rstrip("/")
 AI_API_URL = os.environ.get("AI_API_URL", "").strip()
 AI_API_KEY = os.environ.get("AI_API_KEY", "").strip()
 AI_MODEL = os.environ.get("AI_MODEL", "").strip()
+TRANSCRIBE_API_URL = os.environ.get("TRANSCRIBE_API_URL", "").strip()
+TRANSCRIBE_API_KEY = os.environ.get("TRANSCRIBE_API_KEY", "").strip()
+VISION_API_URL = os.environ.get("VISION_API_URL", "").strip()
+VISION_API_KEY = os.environ.get("VISION_API_KEY", "").strip()
+MEDIA_MAX_BYTES = int(os.environ.get("MEDIA_MAX_BYTES", str(12 * 1024 * 1024)))
 DB_PATH = Path(os.environ.get("BOT_DB_PATH", "/tmp/smart-community-bot.sqlite3"))
 WEBHOOK_PATH = f"/telegram-webhook/{hashlib.sha256(WEBHOOK_SECRET.encode('utf-8')).hexdigest()[:24]}"
 
@@ -628,11 +635,92 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await message.reply_text(final_reply)
 
 
+def provider_text(data: Any) -> str:
+    if not isinstance(data, dict):
+        return ""
+    for key in ("text", "transcript", "description", "result"):
+        value = data.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    choices = data.get("choices") or []
+    if choices and isinstance(choices[0], dict):
+        message_data = choices[0].get("message") or {}
+        content = message_data.get("content") or choices[0].get("text")
+        if isinstance(content, str):
+            return content.strip()
+    return ""
+
+
+async def call_media_provider(url: str, key: str, file_path: Path, filename: str, prompt: str) -> str:
+    if not (url and key):
+        return ""
+    headers = {"Authorization": f"Bearer {key}"}
+    mime = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    try:
+        async with httpx.AsyncClient(timeout=45) as client:
+            with file_path.open("rb") as media_file:
+                response = await client.post(
+                    url,
+                    headers=headers,
+                    data={"prompt": prompt},
+                    files={"file": (filename, media_file, mime)},
+                )
+            response.raise_for_status()
+            return provider_text(response.json())
+    except Exception as exc:
+        logger.warning("Media provider failed: %s", exc)
+        return ""
+
+
 async def media_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.effective_message
     if not message:
         return
-    await message.reply_text("Fayl qabul qilindi. Ovozdan matn va rasm/OCR tahlili uchun qo‘shimcha server integratsiyasi keyingi bosqichda yoqiladi.")
+    language = detect_language(message.caption or "")
+    is_voice = bool(message.voice)
+    provider_url = TRANSCRIBE_API_URL if is_voice else VISION_API_URL
+    provider_key = TRANSCRIBE_API_KEY if is_voice else VISION_API_KEY
+    if not provider_url or not provider_key:
+        if is_voice:
+            text = {
+                "russian": "Голосовое сообщение получено. Для расшифровки голосовых сообщений нужно подключить сервис транскрибации.",
+                "english": "I received the voice message. A transcription provider still needs to be connected to convert it to text.",
+                "uz_cyrillic": "Овозли хабар қабул қилинди. Уни матнга айлантириш учун транскрипция хизмати ҳали уланиши керак.",
+            }.get(language, "Ovozli xabarni oldim. Uni matnga aylantirish uchun transkripsiya xizmati hali ulanmagan.")
+        else:
+            text = {
+                "russian": "Изображение получено. Для распознавания текста и анализа изображения нужно подключить vision/OCR-сервис.",
+                "english": "I received the image. A vision/OCR provider still needs to be connected for text extraction and image analysis.",
+                "uz_cyrillic": "Расм қабул қилинди. Матнни таниш ва расмни таҳлил қилиш учун vision/OCR хизмати ҳали уланиши керак.",
+            }.get(language, "Rasmni oldim. Undagi matnni o‘qish va mazmunini tahlil qilish uchun vision/OCR xizmati hali ulanmagan.")
+        await message.reply_text(text)
+        return
+    try:
+        telegram_file = await context.bot.get_file(message.voice.file_id if is_voice else message.photo[-1].file_id)
+        suffix = ".oga" if is_voice else ".jpg"
+        with tempfile.NamedTemporaryFile(prefix="smart-community-media-", suffix=suffix, delete=False) as temp:
+            temp_path = Path(temp.name)
+        try:
+            await telegram_file.download_to_drive(custom_path=str(temp_path))
+            if temp_path.stat().st_size > MEDIA_MAX_BYTES:
+                await message.reply_text("Fayl hajmi juda katta. Iltimos, kichikroq fayl yuboring.")
+                return
+            prompt = (
+                "Transcribe this voice message accurately. Return only the transcription."
+                if is_voice
+                else "Read all visible text and briefly describe the image. Answer in the user's language."
+            )
+            result = await call_media_provider(provider_url, provider_key, temp_path, temp_path.name, prompt)
+            if result:
+                prefix = "Ovozli xabaringiz matni:\n" if is_voice else "Rasm tahlili:\n"
+                await message.reply_text(prefix + result[:3900])
+            else:
+                await message.reply_text("Faylni tahlil qilish vaqtida xizmat javob bermadi. Keyinroq qayta urinib ko‘ring.")
+        finally:
+            temp_path.unlink(missing_ok=True)
+    except Exception as exc:
+        logger.warning("Telegram media handling failed: %s", exc)
+        await message.reply_text("Faylni qabul qilishda vaqtinchalik xatolik yuz berdi.")
 
 
 async def process_update_once(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -665,7 +753,7 @@ telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_ha
 
 @app.get("/")
 async def health() -> dict[str, Any]:
-    return {"status": "ok", "service": "smart-community-bot", "features": ["multilingual", "moderation", "anti-spam", "points", "games", "idempotent-updates"]}
+    return {"status": "ok", "service": "smart-community-bot", "features": ["multilingual", "moderation", "anti-spam", "points", "games", "conversation-memory", "voice-provider-ready", "vision-ocr-provider-ready", "idempotent-updates"]}
 
 
 @app.post(WEBHOOK_PATH)

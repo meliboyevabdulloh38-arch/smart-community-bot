@@ -20,6 +20,11 @@ Render Environment Variables bo‘limida quyidagilar bo‘lishi kerak:
 | `AI_API_URL` | Ixtiyoriy AI provider endpoint’i |
 | `AI_API_KEY` | Ixtiyoriy AI provider kaliti |
 | `AI_MODEL` | Ixtiyoriy model nomi |
+| `TRANSCRIBE_API_URL` | Ixtiyoriy ovozdan matnga endpoint’i |
+| `TRANSCRIBE_API_KEY` | Ixtiyoriy transkripsiya kaliti |
+| `VISION_API_URL` | Ixtiyoriy rasm/OCR endpoint’i |
+| `VISION_API_KEY` | Ixtiyoriy vision/OCR kaliti |
+| `MEDIA_MAX_BYTES` | Media hajmi limiti; standart 12 MB |
 
 `BOT_TOKEN` yoki boshqa maxfiy qiymatlarni GitHub’ga joylamang. Ularni faqat Render Environment Variables’da saqlang.
 
@@ -47,7 +52,7 @@ Telegram guruhlarida barcha oddiy xabarlarni olish uchun BotFather’dagi Privac
 
 ## Ixtiyoriy kengaytmalar
 
-Agar `AI_API_URL` va `AI_API_KEY` berilsa, bot OpenAI-compatible chat endpoint’iga savol yuborib, foydalanuvchi tilida javob qaytarishga urinadi. Ovozli xabar va rasmlar hozircha qabul qilinadi va qo‘shimcha voice/OCR integratsiyasi kerakligi haqida javob beriladi. Bu modullarni ulash uchun qo‘shimcha provider yoki doimiy saqlash xizmati talab qilinishi mumkin.
+Agar `AI_API_URL` va `AI_API_KEY` berilsa, bot OpenAI-compatible chat endpoint’iga savol yuborib, foydalanuvchi tilida javob qaytarishga urinadi. Ovozli xabar va rasmlar xavfsiz hajm limiti bilan qabul qilinadi. `TRANSCRIBE_API_URL`/`TRANSCRIBE_API_KEY` berilsa, ovoz fayli provider’ga yuborilib matnga aylantiriladi; `VISION_API_URL`/`VISION_API_KEY` berilsa, rasm yoki skrinshot OCR va qisqa mazmun tahliliga yuboriladi. Kalitlar berilmaganida bot foydalanuvchiga bu integratsiya hali faollashtirilmaganini o‘z tilida tushuntiradi.
 
 Rejalashtirilgan postlar, majburiy obuna tekshiruvi, kengaytirilgan statistika paneli va alohida voice-chat yordamchi akkaunti keyingi bosqichlar uchun ajratilgan. Voice-chat’da ko‘rinadigan ishtirokchi bo‘lish oddiy Telegram bot tokenidan tashqari userbot/MTProto akkauntini talab qiladi; bunday maxfiy ma’lumotni kodga yozish mumkin emas.
 

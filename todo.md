@@ -63,3 +63,11 @@
 - [ ] Phase 4: add scheduled posts, forced-subscription checks, and richer admin analytics.
 - [ ] Phase 5: prepare the separate MTProto/userbot voice-chat assistant integration.
 - [ ] Phase 6: validate and deploy each phase without exposing secrets.
+
+## Provider-ready media intake
+
+- [ ] Add server-side transcription endpoint configuration for Telegram voice messages.
+- [ ] Add server-side vision/OCR endpoint configuration for Telegram photos and screenshots.
+- [ ] Download Telegram media only during request handling and enforce size/time limits.
+- [ ] Return a clear Uzbek/Russian/English response when providers are not configured.
+- [ ] Keep credentials in Render environment variables only and never log media or tokens.
