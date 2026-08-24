@@ -42,11 +42,14 @@ logger = logging.getLogger("smart-community-bot")
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "").strip()
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "change-me").strip()
 PUBLIC_URL = os.environ.get("RENDER_EXTERNAL_URL", "").rstrip("/")
-AI_API_URL = os.environ.get("AI_API_URL", "").strip()
-AI_API_KEY = os.environ.get("AI_API_KEY", "").strip()
-AI_MODEL = os.environ.get("AI_MODEL", "").strip()
-TRANSCRIBE_API_URL = os.environ.get("TRANSCRIBE_API_URL", "").strip()
-TRANSCRIBE_API_KEY = os.environ.get("TRANSCRIBE_API_KEY", "").strip()
+AI_PROVIDER = os.environ.get("AI_PROVIDER", "").strip().lower()
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "").strip()
+AI_API_URL = os.environ.get("AI_API_URL", "").strip() or ("https://api.groq.com/openai/v1/chat/completions" if GROQ_API_KEY else "")
+AI_API_KEY = os.environ.get("AI_API_KEY", "").strip() or GROQ_API_KEY
+AI_MODEL = os.environ.get("AI_MODEL", "").strip() or os.environ.get("GROQ_CHAT_MODEL", "").strip()
+TRANSCRIBE_API_URL = os.environ.get("TRANSCRIBE_API_URL", "").strip() or ("https://api.groq.com/openai/v1/audio/transcriptions" if GROQ_API_KEY else "")
+TRANSCRIBE_API_KEY = os.environ.get("TRANSCRIBE_API_KEY", "").strip() or GROQ_API_KEY
+TRANSCRIBE_MODEL = os.environ.get("TRANSCRIBE_MODEL", "").strip() or "whisper-large-v3-turbo"
 VISION_API_URL = os.environ.get("VISION_API_URL", "").strip()
 VISION_API_KEY = os.environ.get("VISION_API_KEY", "").strip()
 def read_positive_int(name: str, default: int) -> int:
@@ -1080,6 +1083,30 @@ def provider_text(data: Any) -> str:
     return ""
 
 
+async def call_transcription_provider(url: str, key: str, file_path: Path, filename: str, language: str) -> str:
+    if not (url and key):
+        return ""
+    headers = {"Authorization": f"Bearer {key}"}
+    language_code = {"russian": "ru", "english": "en", "uzbek": "uz", "uz_cyrillic": "uz"}.get(language, "")
+    data: dict[str, str] = {"model": TRANSCRIBE_MODEL, "response_format": "json", "temperature": "0"}
+    if language_code:
+        data["language"] = language_code
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            with file_path.open("rb") as media_file:
+                response = await client.post(
+                    url,
+                    headers=headers,
+                    data=data,
+                    files={"file": (filename, media_file, "audio/ogg")},
+                )
+            response.raise_for_status()
+            return provider_text(response.json())
+    except Exception as exc:
+        logger.warning("Transcription provider failed: %s", exc)
+        return ""
+
+
 async def call_media_provider(url: str, key: str, file_path: Path, filename: str, prompt: str) -> str:
     if not (url and key):
         return ""
@@ -1139,7 +1166,11 @@ async def media_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 if is_voice
                 else "Read all visible text and briefly describe the image. Answer in the user's language."
             )
-            result = await call_media_provider(provider_url, provider_key, temp_path, temp_path.name, prompt)
+            result = (
+                await call_transcription_provider(provider_url, provider_key, temp_path, temp_path.name, language)
+                if is_voice
+                else await call_media_provider(provider_url, provider_key, temp_path, temp_path.name, prompt)
+            )
             if result:
                 prefix = "Ovozli xabaringiz matni:\n" if is_voice else "Rasm tahlili:\n"
                 await message.reply_text(prefix + result[:3900])

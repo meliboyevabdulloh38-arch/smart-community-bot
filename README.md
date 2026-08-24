@@ -18,11 +18,15 @@ Render Environment Variables bo‘limida quyidagilar bo‘lishi kerak:
 |---|---|
 | `BOT_TOKEN` | BotFather bergan Telegram tokeni |
 | `WEBHOOK_SECRET` | Webhook manzilini himoyalovchi tasodifiy maxfiy qiymat |
-| `AI_API_URL` | Ixtiyoriy AI provider endpoint’i |
-| `AI_API_KEY` | Ixtiyoriy AI provider kaliti |
-| `AI_MODEL` | Ixtiyoriy model nomi |
-| `TRANSCRIBE_API_URL` | Ixtiyoriy ovozdan matnga endpoint’i |
-| `TRANSCRIBE_API_KEY` | Ixtiyoriy transkripsiya kaliti |
+| `AI_PROVIDER` | Ixtiyoriy provider nomi; Groq uchun `groq` |
+| `GROQ_API_KEY` | Groq chat va ovoz funksiyalari uchun maxfiy kalit |
+| `GROQ_CHAT_MODEL` | Ixtiyoriy Groq chat modeli |
+| `AI_API_URL` | Ixtiyoriy AI provider endpoint’i; `GROQ_API_KEY` bo‘lsa Groq endpoint’iga ulanadi |
+| `AI_API_KEY` | Ixtiyoriy AI provider kaliti; `GROQ_API_KEY` bo‘lsa undan foydalanadi |
+| `AI_MODEL` | Ixtiyoriy model nomi; bo‘sh bo‘lsa `GROQ_CHAT_MODEL` olinadi |
+| `TRANSCRIBE_API_URL` | Ixtiyoriy ovozdan matnga endpoint’i; Groq key bo‘lsa avtomatik to‘ldiriladi |
+| `TRANSCRIBE_API_KEY` | Ixtiyoriy transkripsiya kaliti; Groq key bo‘lsa avtomatik to‘ldiriladi |
+| `TRANSCRIBE_MODEL` | Ovoz modeli; standart `whisper-large-v3-turbo` |
 | `VISION_API_URL` | Ixtiyoriy rasm/OCR endpoint’i |
 | `VISION_API_KEY` | Ixtiyoriy vision/OCR kaliti |
 | `MEDIA_MAX_BYTES` | Media hajmi limiti; standart 12 MB |
@@ -64,7 +68,7 @@ Telegram guruhlarida barcha oddiy xabarlarni olish uchun BotFather’dagi Privac
 
 ## Ixtiyoriy kengaytmalar
 
-Agar `AI_API_URL` va `AI_API_KEY` berilsa, bot OpenAI-compatible chat endpoint’iga savol yuborib, foydalanuvchi tilida javob qaytarishga urinadi. Ovozli xabar va rasmlar xavfsiz hajm limiti bilan qabul qilinadi. `TRANSCRIBE_API_URL`/`TRANSCRIBE_API_KEY` berilsa, ovoz fayli provider’ga yuborilib matnga aylantiriladi; `VISION_API_URL`/`VISION_API_KEY` berilsa, rasm yoki skrinshot OCR va qisqa mazmun tahliliga yuboriladi. Kalitlar berilmaganida bot foydalanuvchiga bu integratsiya hali faollashtirilmaganini o‘z tilida tushuntiradi.
+Agar `GROQ_API_KEY` berilsa, bot Groq’ning OpenAI-compatible chat endpoint’i orqali foydalanuvchi tilida haqiqiy AI javoblarini qaytarishga urinadi. `GROQ_API_KEY` ovozli xabarlar uchun ham ishlatiladi; standart model `whisper-large-v3-turbo`. Ovozli xabarlar Groq’ning alohida audio transcription endpoint’iga yuboriladi. Rasmlar xavfsiz hajm limiti bilan qabul qilinadi; OCR/vision uchun alohida mos provider kerak bo‘ladi. Kalitlar berilmaganida bot fallback rejimida ishlaydi va foydalanuvchiga integratsiya faollashtirilmaganini o‘z tilida tushuntiradi.
 
 Rejalashtirilgan postlar SQLite jadvaliga yoziladi va bot ishlayotgan paytda har 30 soniyada tekshiriladi; Render Free uyquga ketsa yoki standart fayl tizimi tozalansa, bunday jadval uchun persistent disk yoki tashqi baza kerak bo‘ladi. Admin o‘zining asosiy guruhida `/majburiy_qosh @boshqa_guruh 6soat` yoki `/majburiy_qosh -1001234567890 24soat` ni yuborib boshqa guruhni vaqtincha majburiy obunaga qo‘shadi. `12soat`, `24soat` yoki aniq tugash vaqti (`23:00`) ham berish mumkin. Vaqt berilmasa qo‘shilish doimiy bo‘ladi. `/majburiy_royxat` ro‘yxat va tugash vaqtini ko‘rsatadi, `/majburiy_ochir @boshqa_guruh` esa guruhni darhol olib tashlaydi. Aniq soat UTC bo‘yicha hisoblanadi. `/obuna_statistika` admin uchun nechta noyob odam majburiy obunadan o‘tganini bugun, oxirgi 7 kun va umumiy kesimda ko‘rsatadi. Statistikada foydalanuvchi nomlari saqlanmaydi, faqat hisoblar yoziladi. Maxsus `/obuna_kimlar` buyrug‘i faqat admin uchun barcha tasdiqlangan foydalanuvchilarning ko‘rinadigan ismi, username’i va UTC vaqtini ko‘rsatadi. Barcha yozuvlar bazada saqlanadi. Admin faqat bir marta `/obuna_kimlar` yozadi, bot uzun ro‘yxatni Telegram xabar hajmiga moslab avtomatik ketma-ket xabarlarga bo‘ladi. Alohida guruh bo‘yicha `/obuna_kimlar @guruh` yoziladi.
  Bot maqsadli guruhda administrator bo‘lishi kerak.

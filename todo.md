@@ -124,6 +124,21 @@ Voice-chat userbot/MTProto integration is paused by user request. Continue with 
 - [ ] Verify voice and image/OCR handlers remain safe when providers are absent.
 - [ ] Harden database path and restart behavior without exposing secrets.
 - [ ] Validate and deploy the next stable feature bundle.
+
+## Provider activation pass
+
+- [ ] Verify current OpenAI-compatible chat, transcription, and vision provider requirements.
+- [ ] Add clear provider-status diagnostics without revealing keys.
+- [ ] Preserve multilingual fallback responses when providers are unavailable.
+- [ ] Document the minimum Render variables needed to activate each provider.
+
+## Selected provider: Groq
+
+- [ ] Use Groq OpenAI-compatible chat endpoint for multilingual AI replies.
+- [ ] Use Groq audio transcription endpoint for Telegram voice messages.
+- [ ] Add a Groq-specific multipart transcription adapter with model and language fields.
+- [ ] Keep vision/OCR provider configuration optional and do not claim it is active without a compatible key.
+- [ ] Document `AI_API_URL`, `AI_API_KEY`, `AI_MODEL`, `TRANSCRIBE_API_URL`, `TRANSCRIBE_API_KEY`, and `TRANSCRIBE_MODEL` for Render.
 - [ ] Show the current page and total pages to admins.
 - [ ] Make `/obuna_kimlar` automatically send every roster entry from one command.
 - [ ] Split long reports into Telegram-safe messages without dropping entries.
