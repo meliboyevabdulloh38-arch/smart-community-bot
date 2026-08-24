@@ -213,22 +213,53 @@ def detect_language(text: str) -> str:
 
 
 def reply_text(language: str, first_name: str, question: str) -> str:
+    """Return a useful local response when no external AI provider is configured."""
     name = first_name or "do‘st"
+    normalized = question.lower().strip()
+    is_greeting = any(word in normalized for word in ("salom", "assalomu", "привет", "здравствуйте", "hello", "hi"))
+    asks_how = any(word in normalized for word in ("qanday", "qanaqa", "как", "how"))
+    asks_what = any(word in normalized for word in ("nima", "что", "what"))
+    asks_why = any(word in normalized for word in ("nega", "nima uchun", "почему", "why"))
+
     if language == "russian":
-        return (f"Здравствуйте, {name}! Я Smart Community Bot.\n\n"
-                "Я разобрал вопрос по смыслу. Сейчас я работаю в тестовом режиме: могу поддержать диалог, определить язык и помочь с командами сообщества. "
-                "Для глубокого AI-анализа подключается отдельный AI-провайдер.")
+        if is_greeting:
+            return f"Здравствуйте, {name}! Я вас слышу. О какой теме поговорим?"
+        if asks_how:
+            return f"Похоже, вы спрашиваете о способе действия: «{question}». Уточните цель или ситуацию, и я разложу ответ по шагам."
+        if asks_what:
+            return f"Вы спрашиваете, что означает «{question}». Уточните термин или предмет — я объясню простыми словами и приведу пример."
+        if asks_why:
+            return f"Вопрос «{question}» требует причины и контекста. Что именно произошло или какой результат вы хотите понять?"
+        return f"Я понял вашу мысль: «{question}». Давайте разберём её по сути: какой ответ вам нужен — объяснение, решение или совет?"
     if language == "english":
-        return (f"Hello, {name}! I am Smart Community Bot.\n\n"
-                "I understood the topic of your question. I am currently running the reliable community test layer: multilingual replies, group tools, moderation, points, and games. "
-                "A server-side AI provider can be enabled for deeper reasoning.")
+        if is_greeting:
+            return f"Hello, {name}! I’m listening. What would you like to discuss?"
+        if asks_how:
+            return f"Your question is about a method: “{question}”. Tell me the goal or situation, and I’ll break it into clear steps."
+        if asks_what:
+            return f"You are asking what “{question}” means. Name the term or subject, and I’ll explain it simply with an example."
+        if asks_why:
+            return f"The question “{question}” needs some context. What happened, or which result are you trying to understand?"
+        return f"I understand the point you raised: “{question}”. Should I give an explanation, a practical solution, or a balanced opinion?"
     if language == "uz_cyrillic":
-        return (f"Ассалому алайкум, {name}! Мен Smart Community Botман.\n\n"
-                "Саволингизнинг мазмунини тушундим. Ҳозир мен жамоа учун кўп тилли мулоқот, модерация, балл ва ўйинларни ишончли тест режимида бажараман. "
-                "Чуқур AI таҳлили учун сервер томонида алоҳида AI хизмати уланади.")
-    return (f"Assalomu alaykum, {name}! Men Smart Community Botman.\n\n"
-            "Savolingiz mazmunini tushundim. Hozir men ko‘p tilli muloqot, guruh boshqaruvi, moderatsiya, ball va o‘yinlarni ishonchli test rejimida bajaraman. "
-            "Chuqur AI tahlili uchun server tomondan alohida AI xizmati ulanadi.")
+        if is_greeting:
+            return f"Ассалому алайкум, {name}! Сизни эшитяпман. Қайси мавзу ҳақида суҳбатлашамиз?"
+        if asks_how:
+            return f"Саволингиз усул ҳақида: «{question}». Мақсадингиз ёки вазиятни ёзинг, жавобни босқичма-босқич тушунтираман."
+        if asks_what:
+            return f"Сиз «{question}» нималигини сўраяпсиз. Термин ёки мавзуни аниқроқ ёзсангиз, содда мисол билан тушунтираман."
+        if asks_why:
+            return f"«{question}» саволига жавоб бериш учун вазият керак. Нима содир бўлди ёки қайси натижани тушунмоқчисиз?"
+        return f"Фикрингизни тушундим: «{question}». Қайси жавоб керак: тушунтириш, амалий ечим ёки холис фикр?"
+    if is_greeting:
+        return f"Assalomu alaykum, {name}! Sizni eshityapman. Qaysi mavzuda suhbatlashamiz?"
+    if asks_how:
+        return f"Savolingiz usul haqida: “{question}”. Maqsadingiz yoki vaziyatni yozing, javobni bosqichma-bosqich tushuntiraman."
+    if asks_what:
+        return f"Siz “{question}” nimani anglatishini so‘rayapsiz. Atama yoki mavzuni aniqroq yozsangiz, sodda misol bilan tushuntiraman."
+    if asks_why:
+        return f"“{question}” savoliga aniq javob berish uchun vaziyat kerak. Nima sodir bo‘ldi yoki qaysi natijani tushunmoqchisiz?"
+    return f"Fikringizni tushundim: “{question}”. Sizga qaysi biri kerak — tushuntirish, amaliy yechim yoki xolis fikr?"
 
 
 def target_user(update: Update):

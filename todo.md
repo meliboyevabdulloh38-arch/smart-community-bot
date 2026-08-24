@@ -30,3 +30,11 @@
 - [ ] Preserve a concise response policy so every group message does not create an excessively long reply.
 - [ ] Document that Telegram Privacy Mode must be disabled or the bot must be an administrator to receive all group messages.
 - [ ] Validate and redeploy the automatic participation mode.
+
+## Real conversational replies
+
+- [ ] Audit why `maybe_ai_reply` falls back to generic templates in production.
+- [ ] Choose an available server-side AI integration path that does not expose credentials.
+- [ ] Add conversational context, language matching, and concise group reply behavior.
+- [ ] Preserve a useful non-AI fallback that reflects the user’s actual message instead of repeating the same template.
+- [ ] Validate and redeploy the conversational update.
