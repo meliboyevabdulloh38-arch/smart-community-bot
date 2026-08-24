@@ -71,3 +71,14 @@
 - [ ] Download Telegram media only during request handling and enforce size/time limits.
 - [ ] Return a clear Uzbek/Russian/English response when providers are not configured.
 - [ ] Keep credentials in Render environment variables only and never log media or tokens.
+
+## Scope decision
+
+Voice-chat userbot/MTProto integration is paused by user request. Continue with non-voice features and validation.
+
+## Non-voice hardening
+
+- [ ] Verify Render environment-variable documentation against the deployed service.
+- [ ] Validate scheduling and subscription checks with safe disabled-default behavior.
+- [ ] Confirm the live health endpoint after the latest deployment.
+- [ ] Keep voice-chat credentials and account setup out of the current deployment.

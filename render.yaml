@@ -10,3 +10,25 @@ services:
         sync: false
       - key: WEBHOOK_SECRET
         generateValue: true
+      - key: AI_API_URL
+        sync: false
+      - key: AI_API_KEY
+        sync: false
+      - key: AI_MODEL
+        sync: false
+      - key: TRANSCRIBE_API_URL
+        sync: false
+      - key: TRANSCRIBE_API_KEY
+        sync: false
+      - key: VISION_API_URL
+        sync: false
+      - key: VISION_API_KEY
+        sync: false
+      - key: MEDIA_MAX_BYTES
+        value: "12582912"
+      - key: BOT_DB_PATH
+        value: "/tmp/smart-community-bot.sqlite3"
+      - key: REQUIRED_CHANNEL_ID
+        sync: false
+      - key: REQUIRED_CHANNEL_URL
+        sync: false
