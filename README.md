@@ -27,6 +27,8 @@ Render Environment Variables bo‘limida quyidagilar bo‘lishi kerak:
 | `VISION_API_KEY` | Ixtiyoriy vision/OCR kaliti |
 | `MEDIA_MAX_BYTES` | Media hajmi limiti; standart 12 MB |
 | `BOT_DB_PATH` | SQLite fayli yo‘li; disk ulanganida `/var/data/smart-community-bot.sqlite3` kabi yo‘l bering |
+| `REQUIRED_CHANNEL_ID` | Ixtiyoriy majburiy obuna kanali ID yoki username |
+| `REQUIRED_CHANNEL_URL` | Ixtiyoriy kanal havolasi; obuna bo‘lmaganlarga ko‘rsatiladi |
 
 `BOT_TOKEN` yoki boshqa maxfiy qiymatlarni GitHub’ga joylamang. Ularni faqat Render Environment Variables’da saqlang.
 
@@ -49,6 +51,9 @@ Guruh adminlari foydalanuvchi xabariga reply qilib o‘zbekcha buyruqlarni ishla
 | `/filtr - so‘z` | Filtr iborasini olib tashlaydi |
 | `/sozlamalar` | Guruh sozlamalarini ko‘rsatadi |
 | `/xulosa` | Guruh faoliyati bo‘yicha qisqa xulosa |
+| `/rejalashtir 18:30 | matn` | Har kuni UTC bo‘yicha post yuborishni rejalashtiradi |
+| `/rejalashtir` | Shu guruhdagi rejalashtirilgan postlarni ko‘rsatadi |
+| `/obuna` | Majburiy kanal obunasini tekshiradi; faqat `REQUIRED_CHANNEL_ID` berilganda ishlaydi |
 
 Telegram guruhlarida barcha oddiy xabarlarni olish uchun BotFather’dagi Privacy Mode’ni o‘chirish yoki botni administrator qilish kerak. Anti-spam filtri takroriy va reklama xabarlarini javobsiz qoldiradi. SQLite xotirasi processed Telegram update ID’larini saqlaydi. Shu sababli webhook retry yoki server restart paytida ayni update qayta kelib qolsa, bot uni ikkinchi marta javob bermasdan tashlab yuboradi. Adminlarning ogohlantirish, jim qilish, bloklash, chiqarish va filtr amallari `moderation_actions` jadvalida qayd etilib, `/statistika` javobida so‘nggi amallar ko‘rsatiladi.
 
@@ -56,7 +61,7 @@ Telegram guruhlarida barcha oddiy xabarlarni olish uchun BotFather’dagi Privac
 
 Agar `AI_API_URL` va `AI_API_KEY` berilsa, bot OpenAI-compatible chat endpoint’iga savol yuborib, foydalanuvchi tilida javob qaytarishga urinadi. Ovozli xabar va rasmlar xavfsiz hajm limiti bilan qabul qilinadi. `TRANSCRIBE_API_URL`/`TRANSCRIBE_API_KEY` berilsa, ovoz fayli provider’ga yuborilib matnga aylantiriladi; `VISION_API_URL`/`VISION_API_KEY` berilsa, rasm yoki skrinshot OCR va qisqa mazmun tahliliga yuboriladi. Kalitlar berilmaganida bot foydalanuvchiga bu integratsiya hali faollashtirilmaganini o‘z tilida tushuntiradi.
 
-Rejalashtirilgan postlar, majburiy obuna tekshiruvi, kengaytirilgan statistika paneli va alohida voice-chat yordamchi akkaunti keyingi bosqichlar uchun ajratilgan. Voice-chat’da ko‘rinadigan ishtirokchi bo‘lish oddiy Telegram bot tokenidan tashqari userbot/MTProto akkauntini talab qiladi; bunday maxfiy ma’lumotni kodga yozish mumkin emas.
+Rejalashtirilgan postlar SQLite jadvaliga yoziladi va bot ishlayotgan paytda har 30 soniyada tekshiriladi; Render Free uyquga ketsa yoki standart fayl tizimi tozalansa, bunday jadval uchun persistent disk yoki tashqi baza kerak bo‘ladi. `REQUIRED_CHANNEL_ID` berilsa, `/obuna` orqali kanalga a’zolik tekshiriladi; bot kanalni o‘zi yaratmaydi va foydalanuvchining maxfiy ma’lumotlarini so‘ramaydi. Voice-chat’da ko‘rinadigan ishtirokchi bo‘lish oddiy Telegram bot tokenidan tashqari userbot/MTProto akkauntini talab qiladi; bunday maxfiy ma’lumotni kodga yozish mumkin emas.
 
 ## Lokal tekshiruv
 

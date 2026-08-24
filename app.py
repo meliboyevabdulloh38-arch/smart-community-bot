@@ -50,12 +50,15 @@ TRANSCRIBE_API_KEY = os.environ.get("TRANSCRIBE_API_KEY", "").strip()
 VISION_API_URL = os.environ.get("VISION_API_URL", "").strip()
 VISION_API_KEY = os.environ.get("VISION_API_KEY", "").strip()
 MEDIA_MAX_BYTES = int(os.environ.get("MEDIA_MAX_BYTES", str(12 * 1024 * 1024)))
+REQUIRED_CHANNEL_ID = os.environ.get("REQUIRED_CHANNEL_ID", "").strip()
+REQUIRED_CHANNEL_URL = os.environ.get("REQUIRED_CHANNEL_URL", "").strip()
 DB_PATH = Path(os.environ.get("BOT_DB_PATH", "/tmp/smart-community-bot.sqlite3"))
 WEBHOOK_PATH = f"/telegram-webhook/{hashlib.sha256(WEBHOOK_SECRET.encode('utf-8')).hexdigest()[:24]}"
 
 app = FastAPI(title="Smart Community Bot")
 update_lock = asyncio.Lock()
 telegram_ready = False
+schedule_task: asyncio.Task[None] | None = None
 
 if not BOT_TOKEN:
     logger.warning("BOT_TOKEN is not set. Add it in Render Environment Variables.")
@@ -116,6 +119,16 @@ class Store:
                     target_id INTEGER NOT NULL DEFAULT 0,
                     target_name TEXT NOT NULL DEFAULT '',
                     details TEXT NOT NULL DEFAULT '',
+                    created_at REAL NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS scheduled_posts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    chat_id INTEGER NOT NULL,
+                    admin_id INTEGER NOT NULL,
+                    post_time TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    last_sent_date TEXT NOT NULL DEFAULT '',
+                    enabled INTEGER NOT NULL DEFAULT 1,
                     created_at REAL NOT NULL
                 );
                 """
@@ -202,6 +215,22 @@ class Store:
     def recent_actions(self, chat_id: int, limit: int = 5) -> list[sqlite3.Row]:
         with self.connect() as conn:
             return list(conn.execute("SELECT admin_name,action,target_name,details,created_at FROM moderation_actions WHERE chat_id=? ORDER BY id DESC LIMIT ?", (chat_id, limit)).fetchall())
+
+    def add_schedule(self, chat_id: int, admin_id: int, post_time: str, content: str) -> None:
+        with self.connect() as conn:
+            conn.execute("INSERT INTO scheduled_posts(chat_id,admin_id,post_time,content,created_at) VALUES(?,?,?,?,?)", (chat_id, admin_id, post_time, content[:3900], time.time()))
+
+    def schedules(self, chat_id: int) -> list[sqlite3.Row]:
+        with self.connect() as conn:
+            return list(conn.execute("SELECT id,post_time,content,enabled FROM scheduled_posts WHERE chat_id=? ORDER BY post_time,id", (chat_id,)).fetchall())
+
+    def due_schedules(self, post_time: str, date_key: str) -> list[sqlite3.Row]:
+        with self.connect() as conn:
+            return list(conn.execute("SELECT id,chat_id,content FROM scheduled_posts WHERE enabled=1 AND post_time=? AND last_sent_date<>?", (post_time, date_key)).fetchall())
+
+    def mark_schedule_sent(self, schedule_id: int, date_key: str) -> None:
+        with self.connect() as conn:
+            conn.execute("UPDATE scheduled_posts SET last_sent_date=? WHERE id=?", (date_key, schedule_id))
 
     def stats(self, chat_id: int) -> tuple[int, int, int]:
         with self.connect() as conn:
@@ -560,6 +589,53 @@ async def filter_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.effective_message.reply_text("Foydalanish: /filtr + so‘z yoki /filtr - so‘z")
 
 
+async def schedule_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await require_admin(update, context):
+        return
+    chat = update.effective_chat
+    admin = update.effective_user
+    if not chat or not admin:
+        return
+    raw = " ".join(context.args).strip()
+    if not raw:
+        rows = store.schedules(chat.id)
+        if not rows:
+            await update.effective_message.reply_text("Hali rejalashtirilgan postlar yo‘q. Misol: /rejalashtir 18:30 | Bugun muhim yangilik bor.")
+            return
+        lines = ["Rejalashtirilgan postlar:"] + [f"{row['id']}. {row['post_time']} — {row['content']}" for row in rows]
+        await update.effective_message.reply_text("\n".join(lines))
+        return
+    if "|" not in raw:
+        await update.effective_message.reply_text("Foydalanish: /rejalashtir 18:30 | Post matni")
+        return
+    post_time, content = (part.strip() for part in raw.split("|", 1))
+    if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", post_time) or not content:
+        await update.effective_message.reply_text("Vaqt HH:MM ko‘rinishida bo‘lsin. Misol: /rejalashtir 09:00 | Xayrli tong!")
+        return
+    store.add_schedule(chat.id, admin.id, post_time, content)
+    audit(update, "rejalashtir", details=f"{post_time} | {content}")
+    await update.effective_message.reply_text(f"Post {post_time} UTC vaqtiga rejalashtirildi.")
+
+
+async def subscription_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    if not user:
+        return
+    if not REQUIRED_CHANNEL_ID:
+        await update.effective_message.reply_text("Majburiy obuna tekshiruvi hali sozlanmagan.")
+        return
+    try:
+        member = await context.bot.get_chat_member(REQUIRED_CHANNEL_ID, user.id)
+        active = member.status not in {ChatMemberStatus.LEFT, ChatMemberStatus.KICKED}
+    except Exception:
+        active = False
+    if active:
+        await update.effective_message.reply_text("Obunangiz tasdiqlandi.")
+    else:
+        suffix = f"\nKanal: {REQUIRED_CHANNEL_URL}" if REQUIRED_CHANNEL_URL else ""
+        await update.effective_message.reply_text("Avval kerakli kanalga obuna bo‘ling, keyin /obuna buyrug‘ini qayta yuboring." + suffix)
+
+
 async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await require_admin(update, context):
         return
@@ -785,6 +861,8 @@ telegram_app.add_handler(CommandHandler(["statistika", "stats"], stats_command))
 telegram_app.add_handler(CommandHandler(["filtr", "filter"], filter_command))
 telegram_app.add_handler(CommandHandler(["sozlamalar", "settings"], settings_command))
 telegram_app.add_handler(CommandHandler(["xulosa", "summary"], summary_command))
+telegram_app.add_handler(CommandHandler(["rejalashtir", "schedule"], schedule_command))
+telegram_app.add_handler(CommandHandler(["obuna", "subscribe"], subscription_command))
 telegram_app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_handler))
 telegram_app.add_handler(MessageHandler(filters.VOICE | filters.PHOTO, media_handler))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
@@ -816,9 +894,23 @@ async def telegram_webhook(request: Request) -> dict[str, Any]:
         return {"ok": False, "error": "update processing failed"}
 
 
+async def schedule_worker() -> None:
+    while True:
+        now = datetime.now(timezone.utc)
+        post_time = now.strftime("%H:%M")
+        date_key = now.strftime("%Y-%m-%d")
+        for row in store.due_schedules(post_time, date_key):
+            try:
+                await telegram_app.bot.send_message(chat_id=int(row["chat_id"]), text=str(row["content"]))
+                store.mark_schedule_sent(int(row["id"]), date_key)
+            except Exception as exc:
+                logger.warning("Scheduled post %s failed: %s", row["id"], exc)
+        await asyncio.sleep(30)
+
+
 @app.on_event("startup")
 async def startup() -> None:
-    global telegram_ready
+    global telegram_ready, schedule_task
     if not BOT_TOKEN:
         return
     try:
@@ -829,6 +921,7 @@ async def startup() -> None:
                 url=f"{PUBLIC_URL}{WEBHOOK_PATH}",
                 drop_pending_updates=False,
             )
+        schedule_task = asyncio.create_task(schedule_worker())
         logger.info("Telegram webhook configured at %s", WEBHOOK_PATH)
     except Exception as exc:
         telegram_ready = False
@@ -837,7 +930,10 @@ async def startup() -> None:
 
 @app.on_event("shutdown")
 async def shutdown() -> None:
-    global telegram_ready
+    global telegram_ready, schedule_task
+    if schedule_task:
+        schedule_task.cancel()
+        schedule_task = None
     if BOT_TOKEN and telegram_ready:
         await telegram_app.shutdown()
         telegram_ready = False
