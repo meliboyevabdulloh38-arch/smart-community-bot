@@ -886,41 +886,36 @@ async def subscription_roster_command(update: Update, context: ContextTypes.DEFA
         await update.effective_message.reply_text("Bu buyruqni guruh ichida yuboring.")
         return
     required_chat_id = ""
-    page = 1
-    reference = ""
-    if context.args:
-        if len(context.args) == 1 and context.args[0].isdigit():
-            page = max(1, int(context.args[0]))
-        else:
-            reference = context.args[0].strip()
-            if len(context.args) > 1 and context.args[1].isdigit():
-                page = max(1, int(context.args[1]))
-        if reference:
-            if reference.startswith("https://t.me/"):
-                reference = "@" + reference.removeprefix("https://t.me/").strip("/").split("/")[0]
-            try:
-                target = await context.bot.get_chat(int(reference) if re.fullmatch(r"-?\d+", reference) else reference)
-                required_chat_id = str(target.id)
-            except Exception:
-                await update.effective_message.reply_text("Guruh topilmadi. @username yoki -100... ko‘rinishidagi ID ni tekshiring.")
-                return
-    page_size = 40
+    reference = context.args[0].strip() if context.args else ""
+    if reference:
+        if reference.startswith("https://t.me/"):
+            reference = "@" + reference.removeprefix("https://t.me/").strip("/").split("/")[0]
+        try:
+            target = await context.bot.get_chat(int(reference) if re.fullmatch(r"-?\d+", reference) else reference)
+            required_chat_id = str(target.id)
+        except Exception:
+            await update.effective_message.reply_text("Guruh topilmadi. @username yoki -100... ko‘rinishidagi ID ni tekshiring.")
+            return
     total = store.subscription_roster_count(chat.id, required_chat_id)
-    total_pages = max(1, (total + page_size - 1) // page_size)
-    if page > total_pages:
-        await update.effective_message.reply_text(f"Bu sahifa mavjud emas. Jami {total_pages} ta sahifa bor.")
-        return
-    rows = store.subscription_roster(chat.id, required_chat_id, page_size, (page - 1) * page_size)
-    if not rows:
+    if not total:
         await update.effective_message.reply_text("Hali /obuna orqali muvaffaqiyatli o‘tganlar yo‘q.")
         return
-    lines = [f"Majburiy obunadan o‘tganlar — {page}/{total_pages}-sahifa (jami {total} ta):"]
+    rows = store.subscription_roster(chat.id, required_chat_id, total, 0)
+    messages: list[str] = []
+    current = [f"Majburiy obunadan o‘tganlar — jami {total} ta:"]
     for index, row in enumerate(rows, 1):
         name = str(row["display_name"] or "Noma’lum ism")
         username = f"@{row['username']}" if row["username"] else "username yo‘q"
         checked = datetime.fromtimestamp(float(row["checked_at"]), timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-        lines.append(f"{index}. {name} — {username} — {checked}")
-    await update.effective_message.reply_text("\n".join(lines))
+        entry = f"{index}. {name} — {username} — {checked}"
+        if sum(len(line) + 1 for line in current) + len(entry) > 3800:
+            messages.append("\n".join(current))
+            current = []
+        current.append(entry)
+    if current:
+        messages.append("\n".join(current))
+    for report in messages:
+        await update.effective_message.reply_text(report)
 
 
 async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

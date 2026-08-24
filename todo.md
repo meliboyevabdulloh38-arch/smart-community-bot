@@ -117,6 +117,9 @@ Voice-chat userbot/MTProto integration is paused by user request. Continue with 
 - [ ] Remove the 100-user roster truncation from storage and reporting.
 - [ ] Add 40-user pagination for `/obuna_kimlar` and optional group/page arguments.
 - [ ] Show the current page and total pages to admins.
+- [ ] Make `/obuna_kimlar` automatically send every roster entry from one command.
+- [ ] Split long reports into Telegram-safe messages without dropping entries.
+- [ ] Preserve optional target-group filtering for the one-command report.
 
 ## Next hardening pass
 
