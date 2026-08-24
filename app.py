@@ -224,6 +224,18 @@ def reply_text(language: str, first_name: str, question: str) -> str:
         "nima haqida suhbat", "nima haqida gap", "qaysi mavzuda", "что обсудим", "о чём поговорим",
         "what should we discuss", "what can we talk about",
     ))
+    book_question = any(marker in normalized for marker in (
+        "kitob", "o'qishga arzi", "o‘qishga arzi", "книг", "что почитать", "book", "read",
+    ))
+
+    if book_question:
+        if language == "russian":
+            return "Если хочется начать с сильных книг: «Атомные привычки» — для практических изменений, «Sapiens» — для широкого взгляда на историю, а «Маленькая жизнь» — для глубокого чтения. Я бы начал с первой."
+        if language == "english":
+            return "For a good start, try *Atomic Habits* for practical change, *Sapiens* for a broad view of history, or *The Midnight Library* for reflective fiction. I’d start with the first one."
+        if language == "uz_cyrillic":
+            return "Китобдан бошлаш учун: «Атом одатлар» — амалий ўзгаришлар учун, «Sapiens» — тарихга кенгроқ қараш учун, «Кеча ярим тун кутубхонаси» — таъсирли бадиий асар сифатида яхши танлов. Мен биринчи китобдан бошлардим."
+        return "Kitobdan boshlash uchun uchta yaxshi yo‘nalish: «Atom odatlar» — amaliy o‘zgarishlar uchun, «Sapiens» — tarixga kengroq qarash uchun, «Yarim tun kutubxonasi» — ta’sirli badiiy asar sifatida. Men birinchi kitobdan boshlardim."
 
     if language == "russian":
         if is_greeting:

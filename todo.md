@@ -46,3 +46,11 @@
 - [ ] Check equivalent Russian and English open-question patterns.
 - [ ] Validate and redeploy the correction.
 - [ ] Retest with the exact user sentence from the group.
+
+## Natural direct-answer style
+
+- [ ] Answer the user’s concrete question first, before asking anything back.
+- [ ] Use friendly everyday Uzbek instead of formal “fikringizni tushundim” phrasing.
+- [ ] For book questions, provide several concrete titles or categories and one-sentence reasons.
+- [ ] Keep any follow-up to one short choice question.
+- [ ] Apply the same conversational style to Russian and English fallback replies.
