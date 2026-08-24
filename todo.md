@@ -97,3 +97,17 @@ Voice-chat userbot/MTProto integration is paused by user request. Continue with 
 - [ ] Accept a target group or channel username/ID in `/majburiy_qosh` from the current admin group.
 - [ ] Accept a target group or channel username/ID in `/majburiy_ochir` from the current admin group.
 - [ ] Confirm the bot can access the target chat and return a clear permission error if it cannot.
+
+## Timed mandatory subscriptions
+
+- [ ] Accept 6-hour, 12-hour, and 24-hour expiry values when adding a target group.
+- [ ] Accept a specified clock time as an expiry value.
+- [ ] Remove expired required chats automatically before `/obuna` checks.
+- [ ] Show expiry times in `/majburiy_royxat` and document the commands.
+
+## Next hardening pass
+
+- [ ] Review the SQLite path and startup behavior for Render restarts.
+- [ ] Add safe database-directory creation and clear health metadata for storage mode.
+- [ ] Review admin command error messages and avoid repeated responses on webhook retries.
+- [ ] Validate the live deployment after the hardening pass.

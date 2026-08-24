@@ -49,10 +49,22 @@ TRANSCRIBE_API_URL = os.environ.get("TRANSCRIBE_API_URL", "").strip()
 TRANSCRIBE_API_KEY = os.environ.get("TRANSCRIBE_API_KEY", "").strip()
 VISION_API_URL = os.environ.get("VISION_API_URL", "").strip()
 VISION_API_KEY = os.environ.get("VISION_API_KEY", "").strip()
-MEDIA_MAX_BYTES = int(os.environ.get("MEDIA_MAX_BYTES", str(12 * 1024 * 1024)))
+def read_positive_int(name: str, default: int) -> int:
+    raw = os.environ.get(name, str(default)).strip()
+    try:
+        value = int(raw)
+        return value if value > 0 else default
+    except ValueError:
+        logger.warning("Invalid %s value; using default.", name)
+        return default
+
+
+MEDIA_MAX_BYTES = read_positive_int("MEDIA_MAX_BYTES", 12 * 1024 * 1024)
 REQUIRED_CHANNEL_ID = os.environ.get("REQUIRED_CHANNEL_ID", "").strip()
 REQUIRED_CHANNEL_URL = os.environ.get("REQUIRED_CHANNEL_URL", "").strip()
-DB_PATH = Path(os.environ.get("BOT_DB_PATH", "/tmp/smart-community-bot.sqlite3"))
+BOT_DB_PATH_RAW = os.environ.get("BOT_DB_PATH", "").strip()
+DB_PATH = Path(BOT_DB_PATH_RAW or "/tmp/smart-community-bot.sqlite3")
+DB_STORAGE_MODE = "configured" if BOT_DB_PATH_RAW else "ephemeral"
 WEBHOOK_PATH = f"/telegram-webhook/{hashlib.sha256(WEBHOOK_SECRET.encode('utf-8')).hexdigest()[:24]}"
 
 app = FastAPI(title="Smart Community Bot")
@@ -136,10 +148,14 @@ class Store:
                     title TEXT NOT NULL DEFAULT '',
                     invite_url TEXT NOT NULL DEFAULT '',
                     added_by INTEGER NOT NULL,
-                    created_at REAL NOT NULL
+                    created_at REAL NOT NULL,
+                    expiry_at REAL
                 );
                 """
             )
+            columns = {row["name"] for row in conn.execute("PRAGMA table_info(required_chats)").fetchall()}
+            if "expiry_at" not in columns:
+                conn.execute("ALTER TABLE required_chats ADD COLUMN expiry_at REAL")
 
     def connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.path, timeout=10)
@@ -239,17 +255,22 @@ class Store:
         with self.connect() as conn:
             conn.execute("UPDATE scheduled_posts SET last_sent_date=? WHERE id=?", (date_key, schedule_id))
 
-    def add_required_chat(self, chat_id: int, title: str, invite_url: str, added_by: int) -> None:
+    def add_required_chat(self, chat_id: int, title: str, invite_url: str, added_by: int, expiry_at: float | None = None) -> None:
         with self.connect() as conn:
-            conn.execute("INSERT INTO required_chats(chat_id,title,invite_url,added_by,created_at) VALUES(?,?,?,?,?) ON CONFLICT(chat_id) DO UPDATE SET title=excluded.title, invite_url=excluded.invite_url, added_by=excluded.added_by", (chat_id, title or "", invite_url or "", added_by, time.time()))
+            conn.execute("INSERT INTO required_chats(chat_id,title,invite_url,added_by,created_at,expiry_at) VALUES(?,?,?,?,?,?) ON CONFLICT(chat_id) DO UPDATE SET title=excluded.title, invite_url=excluded.invite_url, added_by=excluded.added_by, expiry_at=excluded.expiry_at", (chat_id, title or "", invite_url or "", added_by, time.time(), expiry_at))
 
     def remove_required_chat(self, chat_id: int) -> None:
         with self.connect() as conn:
             conn.execute("DELETE FROM required_chats WHERE chat_id=?", (chat_id,))
 
-    def required_chats(self) -> list[sqlite3.Row]:
+    def purge_expired_required_chats(self) -> None:
         with self.connect() as conn:
-            return list(conn.execute("SELECT chat_id,title,invite_url FROM required_chats ORDER BY title,chat_id").fetchall())
+            conn.execute("DELETE FROM required_chats WHERE expiry_at IS NOT NULL AND expiry_at <= ?", (time.time(),))
+
+    def required_chats(self) -> list[sqlite3.Row]:
+        self.purge_expired_required_chats()
+        with self.connect() as conn:
+            return list(conn.execute("SELECT chat_id,title,invite_url,expiry_at FROM required_chats ORDER BY title,chat_id").fetchall())
 
     def stats(self, chat_id: int) -> tuple[int, int, int]:
         with self.connect() as conn:
@@ -667,6 +688,26 @@ async def resolve_required_chat(update: Update, context: ContextTypes.DEFAULT_TY
     return target
 
 
+def parse_required_expiry(value: str) -> tuple[float | None, str]:
+    now = datetime.now(timezone.utc)
+    match = re.fullmatch(r"(6|12|24)(?:soat|s|h)?", value.lower())
+    if match:
+        return time.time() + int(match.group(1)) * 3600, f"{match.group(1)} soat"
+    if re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value):
+        expiry = datetime.strptime(value, "%H:%M").replace(tzinfo=timezone.utc)
+        expiry = expiry.replace(year=now.year, month=now.month, day=now.day)
+        if expiry <= now:
+            expiry += timedelta(days=1)
+        return expiry.timestamp(), f"UTC {value}"
+    return None, "doimiy"
+
+
+def expiry_label(expiry_at: float | None) -> str:
+    if not expiry_at:
+        return "doimiy"
+    return datetime.fromtimestamp(float(expiry_at), timezone.utc).strftime("%Y-%m-%d %H:%M UTC gacha")
+
+
 async def required_add_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await require_admin(update, context):
         return
@@ -676,15 +717,22 @@ async def required_add_command(update: Update, context: ContextTypes.DEFAULT_TYP
     target = await resolve_required_chat(update, context)
     if not target:
         return
+    expiry_at = None
+    expiry_text = "doimiy"
+    if len(context.args) >= 2:
+        expiry_at, expiry_text = parse_required_expiry(context.args[1].strip())
+        if expiry_at is None and expiry_text == "doimiy":
+            await update.effective_message.reply_text("Vaqt 6soat, 12soat, 24soat yoki HH:MM ko‘rinishida bo‘lsin.")
+            return
     invite_url = f"https://t.me/{target.username}" if target.username else ""
     if not invite_url:
         try:
             invite_url = await context.bot.export_chat_invite_link(target.id)
         except Exception:
             invite_url = ""
-    store.add_required_chat(target.id, target.title or str(target.id), invite_url, admin.id)
-    audit(update, "majburiy-obuna-qo‘shish", details=f"{target.title or target.id} ({target.id})")
-    await update.effective_message.reply_text(f"{target.title or target.id} majburiy obuna ro‘yxatiga qo‘shildi.")
+    store.add_required_chat(target.id, target.title or str(target.id), invite_url, admin.id, expiry_at)
+    audit(update, "majburiy-obuna-qo‘shish", details=f"{target.title or target.id} ({target.id}) | {expiry_text}")
+    await update.effective_message.reply_text(f"{target.title or target.id} majburiy obunaga qo‘shildi. Amal qilish muddati: {expiry_text}.")
 
 
 async def required_list_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -696,7 +744,7 @@ async def required_list_command(update: Update, context: ContextTypes.DEFAULT_TY
         return
     lines = ["Majburiy obuna guruhlari:"]
     for row in rows:
-        lines.append(f"- {row['title']} ({row['chat_id']})")
+        lines.append(f"- {row['title']} ({row['chat_id']}) — {expiry_label(row['expiry_at'])}")
     if REQUIRED_CHANNEL_ID:
         lines.append(f"- Sozlamadagi kanal: {REQUIRED_CHANNEL_ID}")
     await update.effective_message.reply_text("\n".join(lines))
@@ -729,14 +777,14 @@ async def subscription_command(update: Update, context: ContextTypes.DEFAULT_TYP
     user = update.effective_user
     if not user:
         return
-    required = [(str(row["chat_id"]), str(row["title"]), str(row["invite_url"])) for row in store.required_chats()]
-    if REQUIRED_CHANNEL_ID and not any(chat_id == REQUIRED_CHANNEL_ID for chat_id, _, _ in required):
-        required.append((REQUIRED_CHANNEL_ID, "Kerakli kanal", REQUIRED_CHANNEL_URL))
+    required = [(str(row["chat_id"]), str(row["title"]), str(row["invite_url"]), row["expiry_at"]) for row in store.required_chats()]
+    if REQUIRED_CHANNEL_ID and not any(chat_id == REQUIRED_CHANNEL_ID for chat_id, _, _, _ in required):
+        required.append((REQUIRED_CHANNEL_ID, "Kerakli kanal", REQUIRED_CHANNEL_URL, None))
     if not required:
         await update.effective_message.reply_text("Majburiy obuna ro‘yxati bo‘sh. Admin guruh ichida /majburiy_qosh buyrug‘ini yuborsin.")
         return
     missing: list[str] = []
-    for chat_id, title, invite_url in required:
+    for chat_id, title, invite_url, _expiry_at in required:
         try:
             member = await context.bot.get_chat_member(chat_id, user.id)
             active = member.status not in {ChatMemberStatus.LEFT, ChatMemberStatus.KICKED}
@@ -987,8 +1035,7 @@ telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_ha
 
 @app.get("/")
 async def health() -> dict[str, Any]:
-    return {"status": "ok", "service": "smart-community-bot", "features": ["multilingual", "moderation", "anti-spam", "points", "games", "conversation-memory", "voice-provider-ready", "vision-ocr-provider-ready", "self-service-subscription", "scheduled-posts", "idempotent-updates"
-]}
+    return {"status": "ok", "service": "smart-community-bot", "storage": DB_STORAGE_MODE, "features": ["multilingual", "moderation", "anti-spam", "points", "games", "conversation-memory", "voice-provider-ready", "vision-ocr-provider-ready", "self-service-subscription", "scheduled-posts", "idempotent-updates"]}
 
 
 @app.post(WEBHOOK_PATH)
