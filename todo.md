@@ -38,3 +38,11 @@
 - [ ] Add conversational context, language matching, and concise group reply behavior.
 - [ ] Preserve a useful non-AI fallback that reflects the user’s actual message instead of repeating the same template.
 - [ ] Validate and redeploy the conversational update.
+
+## Question-classification correction
+
+- [ ] Treat “nima haqida suhbatlashamiz?” as an open conversation prompt, not a definition request.
+- [ ] Add a natural Uzbek response that proposes several discussion topics and invites a choice.
+- [ ] Check equivalent Russian and English open-question patterns.
+- [ ] Validate and redeploy the correction.
+- [ ] Retest with the exact user sentence from the group.

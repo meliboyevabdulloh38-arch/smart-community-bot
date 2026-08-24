@@ -220,10 +220,16 @@ def reply_text(language: str, first_name: str, question: str) -> str:
     asks_how = any(word in normalized for word in ("qanday", "qanaqa", "как", "how"))
     asks_what = any(word in normalized for word in ("nima", "что", "what"))
     asks_why = any(word in normalized for word in ("nega", "nima uchun", "почему", "why"))
+    open_topic = any(marker in normalized for marker in (
+        "nima haqida suhbat", "nima haqida gap", "qaysi mavzuda", "что обсудим", "о чём поговорим",
+        "what should we discuss", "what can we talk about",
+    ))
 
     if language == "russian":
         if is_greeting:
             return f"Здравствуйте, {name}! Я вас слышу. О какой теме поговорим?"
+        if open_topic:
+            return "Давайте выберем тему: полезные технологии, новости сообщества, книги, фильмы или жизненные советы. Что интереснее?"
         if asks_how:
             return f"Похоже, вы спрашиваете о способе действия: «{question}». Уточните цель или ситуацию, и я разложу ответ по шагам."
         if asks_what:
@@ -234,6 +240,8 @@ def reply_text(language: str, first_name: str, question: str) -> str:
     if language == "english":
         if is_greeting:
             return f"Hello, {name}! I’m listening. What would you like to discuss?"
+        if open_topic:
+            return "We can discuss useful technology, community news, books, films, or practical life questions. Which topic should we start with?"
         if asks_how:
             return f"Your question is about a method: “{question}”. Tell me the goal or situation, and I’ll break it into clear steps."
         if asks_what:
@@ -244,6 +252,8 @@ def reply_text(language: str, first_name: str, question: str) -> str:
     if language == "uz_cyrillic":
         if is_greeting:
             return f"Ассалому алайкум, {name}! Сизни эшитяпман. Қайси мавзу ҳақида суҳбатлашамиз?"
+        if open_topic:
+            return "Технология, жамоа янгиликлари, китоблар, фильмлар ёки ҳаётий маслаҳатлар ҳақида суҳбатлашишимиз мумкин. Қайси мавзуни танлаймиз?"
         if asks_how:
             return f"Саволингиз усул ҳақида: «{question}». Мақсадингиз ёки вазиятни ёзинг, жавобни босқичма-босқич тушунтираман."
         if asks_what:
@@ -253,6 +263,8 @@ def reply_text(language: str, first_name: str, question: str) -> str:
         return f"Фикрингизни тушундим: «{question}». Қайси жавоб керак: тушунтириш, амалий ечим ёки холис фикр?"
     if is_greeting:
         return f"Assalomu alaykum, {name}! Sizni eshityapman. Qaysi mavzuda suhbatlashamiz?"
+    if open_topic:
+        return "Texnologiya, guruh yangiliklari, kitoblar, filmlar yoki hayotiy maslahatlar haqida suhbatlashishimiz mumkin. Qaysi mavzuni tanlaymiz?"
     if asks_how:
         return f"Savolingiz usul haqida: “{question}”. Maqsadingiz yoki vaziyatni yozing, javobni bosqichma-bosqich tushuntiraman."
     if asks_what:
