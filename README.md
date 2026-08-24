@@ -4,7 +4,8 @@ Smart Community Bot — Telegram guruh va shaxsiy chatlari uchun o‘zbek lotin/
 
 ## Render sozlamalari
 
-Render Web Service uchun quyidagilar ishlatiladi:
+Render Web Service uchun quyidagilar ishlatiladi. Muhim eslatma: Render Free’dagi standart fayl tizimi restart yoki redeploy’da tozalanishi mumkin. Ballar, xotira va moderatsiya jurnali uzluksiz saqlanishi kerak bo‘lsa, Render’da persistent disk ulab `BOT_DB_PATH` ni shu disk ichidagi faylga sozlash yoki keyingi bosqichda tashqi PostgreSQL bazasiga ko‘chirish kerak.
+
 
 ```text
 Build Command: pip install -r requirements.txt
@@ -25,6 +26,7 @@ Render Environment Variables bo‘limida quyidagilar bo‘lishi kerak:
 | `VISION_API_URL` | Ixtiyoriy rasm/OCR endpoint’i |
 | `VISION_API_KEY` | Ixtiyoriy vision/OCR kaliti |
 | `MEDIA_MAX_BYTES` | Media hajmi limiti; standart 12 MB |
+| `BOT_DB_PATH` | SQLite fayli yo‘li; disk ulanganida `/var/data/smart-community-bot.sqlite3` kabi yo‘l bering |
 
 `BOT_TOKEN` yoki boshqa maxfiy qiymatlarni GitHub’ga joylamang. Ularni faqat Render Environment Variables’da saqlang.
 
@@ -48,7 +50,7 @@ Guruh adminlari foydalanuvchi xabariga reply qilib o‘zbekcha buyruqlarni ishla
 | `/sozlamalar` | Guruh sozlamalarini ko‘rsatadi |
 | `/xulosa` | Guruh faoliyati bo‘yicha qisqa xulosa |
 
-Telegram guruhlarida barcha oddiy xabarlarni olish uchun BotFather’dagi Privacy Mode’ni o‘chirish yoki botni administrator qilish kerak. Anti-spam filtri takroriy va reklama xabarlarini javobsiz qoldiradi. SQLite xotirasi processed Telegram update ID’larini saqlaydi. Shu sababli webhook retry yoki server restart paytida ayni update qayta kelib qolsa, bot uni ikkinchi marta javob bermasdan tashlab yuboradi.
+Telegram guruhlarida barcha oddiy xabarlarni olish uchun BotFather’dagi Privacy Mode’ni o‘chirish yoki botni administrator qilish kerak. Anti-spam filtri takroriy va reklama xabarlarini javobsiz qoldiradi. SQLite xotirasi processed Telegram update ID’larini saqlaydi. Shu sababli webhook retry yoki server restart paytida ayni update qayta kelib qolsa, bot uni ikkinchi marta javob bermasdan tashlab yuboradi. Adminlarning ogohlantirish, jim qilish, bloklash, chiqarish va filtr amallari `moderation_actions` jadvalida qayd etilib, `/statistika` javobida so‘nggi amallar ko‘rsatiladi.
 
 ## Ixtiyoriy kengaytmalar
 

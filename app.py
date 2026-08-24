@@ -107,6 +107,17 @@ class Store:
                     content TEXT NOT NULL,
                     created_at REAL NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS moderation_actions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    chat_id INTEGER NOT NULL,
+                    admin_id INTEGER NOT NULL,
+                    admin_name TEXT NOT NULL DEFAULT '',
+                    action TEXT NOT NULL,
+                    target_id INTEGER NOT NULL DEFAULT 0,
+                    target_name TEXT NOT NULL DEFAULT '',
+                    details TEXT NOT NULL DEFAULT '',
+                    created_at REAL NOT NULL
+                );
                 """
             )
 
@@ -180,6 +191,17 @@ class Store:
             row = conn.execute("SELECT last_message_hash,last_message_at FROM users WHERE chat_id=? AND user_id=?", (chat_id, user_id)).fetchone()
             conn.execute("UPDATE users SET last_message_hash=?, last_message_at=? WHERE chat_id=? AND user_id=?", (digest, now, chat_id, user_id))
             return (str(row["last_message_hash"]), float(row["last_message_at"])) if row else ("", 0.0)
+
+    def log_action(self, chat_id: int, admin_id: int, admin_name: str, action: str, target_id: int = 0, target_name: str = "", details: str = "") -> None:
+        with self.connect() as conn:
+            conn.execute(
+                "INSERT INTO moderation_actions(chat_id,admin_id,admin_name,action,target_id,target_name,details,created_at) VALUES(?,?,?,?,?,?,?,?)",
+                (chat_id, admin_id, admin_name or "", action, target_id, target_name or "", details[:500], time.time()),
+            )
+
+    def recent_actions(self, chat_id: int, limit: int = 5) -> list[sqlite3.Row]:
+        with self.connect() as conn:
+            return list(conn.execute("SELECT admin_name,action,target_name,details,created_at FROM moderation_actions WHERE chat_id=? ORDER BY id DESC LIMIT ?", (chat_id, limit)).fetchall())
 
     def stats(self, chat_id: int) -> tuple[int, int, int]:
         with self.connect() as conn:
@@ -391,6 +413,13 @@ async def game_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     )
 
 
+def audit(update: Update, action: str, target: Any = None, details: str = "") -> None:
+    chat = update.effective_chat
+    admin = update.effective_user
+    if chat and admin:
+        store.log_action(chat.id, admin.id, admin.full_name, action, getattr(target, "id", 0), getattr(target, "full_name", ""), details)
+
+
 async def warn_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await require_admin(update, context):
         return
@@ -401,6 +430,7 @@ async def warn_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     chat = update.effective_chat
     store.ensure_user(chat.id, target.id, target.full_name)
     count = store.add_warning(chat.id, target.id)
+    audit(update, "ogohlantir", target, f"{count}/3")
     if count >= 3:
         try:
             await context.bot.ban_chat_member(chat.id, target.id)
@@ -427,6 +457,7 @@ async def mute_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await context.bot.restrict_chat_member(chat.id, target.id, ChatPermissions(can_send_messages=False), until_date=datetime.fromtimestamp(until, tz=timezone.utc))
         store.ensure_user(chat.id, target.id, target.full_name)
         store.set_muted(chat.id, target.id, until)
+        audit(update, "jim", target, f"{minutes} daqiqa")
         await update.effective_message.reply_text(f"{target.full_name} {minutes} daqiqaga jim qilindi.")
     except Exception:
         await update.effective_message.reply_text("Jim qilish amalga oshmadi. Botga admin huquqi va xabarlarni cheklash ruxsati kerak.")
@@ -443,6 +474,7 @@ async def unmute_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     try:
         await context.bot.restrict_chat_member(chat.id, target.id, ChatPermissions(can_send_messages=True, can_send_other_messages=True, can_add_web_page_previews=True))
         store.set_muted(chat.id, target.id, 0)
+        audit(update, "jimdanchiqar", target)
         await update.effective_message.reply_text(f"{target.full_name} yana yozishi mumkin.")
     except Exception:
         await update.effective_message.reply_text("Jimlikni olib tashlash amalga oshmadi. Bot admin ekanini tekshiring.")
@@ -458,6 +490,7 @@ async def ban_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
     try:
         await context.bot.ban_chat_member(chat.id, target.id)
+        audit(update, "blok", target)
         await update.effective_message.reply_text(f"{target.full_name} guruhdan bloklandi.")
     except Exception:
         await update.effective_message.reply_text("Bloklash amalga oshmadi. Bot admin huquqini tekshiring.")
@@ -473,6 +506,7 @@ async def unban_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
     try:
         await context.bot.unban_chat_member(chat.id, target.id, only_if_banned=True)
+        audit(update, "blokdanchiqar", target)
         await update.effective_message.reply_text(f"{target.full_name} blokdan chiqarildi.")
     except Exception:
         await update.effective_message.reply_text("Blokdan chiqarish amalga oshmadi.")
@@ -489,6 +523,7 @@ async def kick_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     try:
         await context.bot.ban_chat_member(chat.id, target.id)
         await context.bot.unban_chat_member(chat.id, target.id)
+        audit(update, "hayda", target)
         await update.effective_message.reply_text(f"{target.full_name} guruhdan chiqarildi.")
     except Exception:
         await update.effective_message.reply_text("Foydalanuvchini chiqarish amalga oshmadi.")
@@ -499,7 +534,9 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
     chat = update.effective_chat
     members, points, warnings = store.stats(chat.id)
-    await update.effective_message.reply_text(f"📊 Guruh statistikasi:\nKuzatilgan a’zolar: {members}\nJami ball: {points}\nOgohlantirishlar: {warnings}")
+    recent = store.recent_actions(chat.id)
+    audit_text = "\n".join(f"{row['admin_name'] or 'admin'} → {row['action']} → {row['target_name'] or '-'}" for row in recent) or "Hali admin amallari yo‘q."
+    await update.effective_message.reply_text(f"📊 Guruh statistikasi:\nKuzatilgan a’zolar: {members}\nJami ball: {points}\nOgohlantirishlar: {warnings}\n\nSo‘nggi admin amallari:\n{audit_text}")
 
 
 async def filter_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -513,9 +550,11 @@ async def filter_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     phrase = " ".join(context.args).strip()
     if phrase.startswith("+"):
         store.add_filter(chat.id, phrase[1:].strip())
+        audit(update, "filtr-qo‘shish", details=phrase[1:].strip())
         await update.effective_message.reply_text("Filtr qo‘shildi.")
     elif phrase.startswith("-"):
         store.remove_filter(chat.id, phrase[1:].strip())
+        audit(update, "filtr-o‘chirish", details=phrase[1:].strip())
         await update.effective_message.reply_text("Filtr o‘chirildi.")
     else:
         await update.effective_message.reply_text("Foydalanish: /filtr + so‘z yoki /filtr - so‘z")
