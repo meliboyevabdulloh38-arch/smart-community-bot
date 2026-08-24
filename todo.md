@@ -54,3 +54,12 @@
 - [ ] For book questions, provide several concrete titles or categories and one-sentence reasons.
 - [ ] Keep any follow-up to one short choice question.
 - [ ] Apply the same conversational style to Russian and English fallback replies.
+
+## Ordered completion roadmap
+
+- [ ] Phase 1: connect a real server-side AI conversation provider with Uzbek, Russian, and English language matching.
+- [ ] Phase 2: add voice-to-text and image/OCR processing through optional server-side providers.
+- [ ] Phase 3: move SQLite state from ephemeral `/tmp` to durable storage and expand moderation safeguards.
+- [ ] Phase 4: add scheduled posts, forced-subscription checks, and richer admin analytics.
+- [ ] Phase 5: prepare the separate MTProto/userbot voice-chat assistant integration.
+- [ ] Phase 6: validate and deploy each phase without exposing secrets.

@@ -92,6 +92,14 @@ class Store:
                     phrase TEXT NOT NULL,
                     PRIMARY KEY (chat_id, phrase)
                 );
+                CREATE TABLE IF NOT EXISTS conversation_messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    chat_id INTEGER NOT NULL,
+                    user_name TEXT NOT NULL DEFAULT '',
+                    role TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    created_at REAL NOT NULL
+                );
                 """
             )
 
@@ -186,6 +194,25 @@ class Store:
     def filters(self, chat_id: int) -> list[str]:
         with self.connect() as conn:
             return [str(row["phrase"]) for row in conn.execute("SELECT phrase FROM filters WHERE chat_id=? ORDER BY phrase", (chat_id,)).fetchall()]
+
+    def add_conversation_message(self, chat_id: int, user_name: str, role: str, content: str) -> None:
+        with self.connect() as conn:
+            conn.execute(
+                "INSERT INTO conversation_messages(chat_id,user_name,role,content,created_at) VALUES(?,?,?,?,?)",
+                (chat_id, user_name or "", role, content[:2000], time.time()),
+            )
+            conn.execute(
+                "DELETE FROM conversation_messages WHERE chat_id=? AND id NOT IN (SELECT id FROM conversation_messages WHERE chat_id=? ORDER BY id DESC LIMIT 12)",
+                (chat_id, chat_id),
+            )
+
+    def conversation(self, chat_id: int, limit: int = 8) -> list[dict[str, str]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                "SELECT role, content FROM conversation_messages WHERE chat_id=? ORDER BY id DESC LIMIT ?",
+                (chat_id, limit),
+            ).fetchall()
+        return [{"role": str(row["role"]), "content": str(row["content"])} for row in reversed(rows)]
 
 
 store = Store(DB_PATH)
@@ -519,11 +546,28 @@ async def welcome_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await message.reply_text(f"Xush kelibsiz, {names}! Guruh qoidalariga rioya qiling. Savol bo‘lsa meni @mention qiling.")
 
 
-async def maybe_ai_reply(question: str, language: str) -> Optional[str]:
+async def maybe_ai_reply(question: str, language: str, chat_id: int | None = None) -> Optional[str]:
     if not (AI_API_URL and AI_API_KEY):
         return None
+    language_name = {
+        "uzbek": "Uzbek Latin",
+        "uz_cyrillic": "Uzbek Cyrillic",
+        "russian": "Russian",
+        "english": "English",
+    }.get(language, "the user's language")
+    system_prompt = (
+        f"You are Dadasi, a warm and intelligent Telegram community participant. Answer in {language_name}. "
+        "Reply directly to the latest message, using the recent conversation for context. "
+        "Do not describe the user's question or ask generic meta-questions such as whether they want an explanation. "
+        "Give a concrete, useful answer first, keep group replies reasonably concise, and ask at most one natural follow-up when it helps. "
+        "Never claim to have current information unless it is present in the conversation."
+    )
+    messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
+    if chat_id is not None:
+        messages.extend(store.conversation(chat_id))
+    messages.append({"role": "user", "content": question})
     headers = {"Authorization": f"Bearer {AI_API_KEY}", "Content-Type": "application/json"}
-    payload: dict[str, Any] = {"messages": [{"role": "system", "content": "Answer in the user's language. Be thoughtful, safe, and concise."}, {"role": "user", "content": question}]}
+    payload: dict[str, Any] = {"messages": messages}
     if AI_MODEL:
         payload["model"] = AI_MODEL
     try:
@@ -577,8 +621,11 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     clean = MENTION_RE.sub("", text).strip()
     language = detect_language(clean)
-    ai_reply = await maybe_ai_reply(clean, language)
-    await message.reply_text(ai_reply or reply_text(language, user.first_name, clean))
+    ai_reply = await maybe_ai_reply(clean, language, chat.id)
+    final_reply = ai_reply or reply_text(language, user.first_name, clean)
+    store.add_conversation_message(chat.id, user.full_name, "user", clean)
+    store.add_conversation_message(chat.id, "Dadasi", "assistant", final_reply)
+    await message.reply_text(final_reply)
 
 
 async def media_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
