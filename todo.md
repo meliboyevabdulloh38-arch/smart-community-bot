@@ -105,6 +105,13 @@ Voice-chat userbot/MTProto integration is paused by user request. Continue with 
 - [ ] Remove expired required chats automatically before `/obuna` checks.
 - [ ] Show expiry times in `/majburiy_royxat` and document the commands.
 
+## Mandatory-subscription analytics
+
+- [ ] Record successful `/obuna` checks with chat, user, and timestamp.
+- [ ] Aggregate unique users for today, seven days, and all time.
+- [ ] Aggregate per-required-chat pass counts without exposing user identities.
+- [ ] Add Uzbek admin-only `/obuna_statistika` output and include a short summary in `/statistika`.
+
 ## Next hardening pass
 
 - [ ] Review the SQLite path and startup behavior for Render restarts.

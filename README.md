@@ -53,7 +53,8 @@ Guruh adminlari foydalanuvchi xabariga reply qilib o‘zbekcha buyruqlarni ishla
 | `/xulosa` | Guruh faoliyati bo‘yicha qisqa xulosa |
 | `/rejalashtir 18:30 | matn` | Har kuni UTC bo‘yicha post yuborishni rejalashtiradi |
 | `/rejalashtir` | Shu guruhdagi rejalashtirilgan postlarni ko‘rsatadi |
-| `/obuna` | Barcha majburiy guruh va kanallarga a’zolikni tekshiradi |
+| `/obuna` | Barcha majburiy guruh va kanallarga a’zolikni tekshiradi va muvaffaqiyatli natijani hisoblaydi |
+| `/obuna_statistika` | Admin uchun bugungi, 7 kunlik va umumiy obuna natijalarini ko‘rsatadi |
 | `/majburiy_qosh @guruh 6soat` | Guruhni 6 soatga qo‘shadi; `12soat`, `24soat` yoki `HH:MM` ham mumkin |
 | `/majburiy_royxat` | Majburiy obuna guruhlari va tugash vaqtlarini ko‘rsatadi |
 | `/majburiy_ochir @guruh` | Ko‘rsatilgan guruhni olib tashlaydi; argumentsiz yuborilsa hozirgi guruh o‘chiriladi |
@@ -64,7 +65,7 @@ Telegram guruhlarida barcha oddiy xabarlarni olish uchun BotFather’dagi Privac
 
 Agar `AI_API_URL` va `AI_API_KEY` berilsa, bot OpenAI-compatible chat endpoint’iga savol yuborib, foydalanuvchi tilida javob qaytarishga urinadi. Ovozli xabar va rasmlar xavfsiz hajm limiti bilan qabul qilinadi. `TRANSCRIBE_API_URL`/`TRANSCRIBE_API_KEY` berilsa, ovoz fayli provider’ga yuborilib matnga aylantiriladi; `VISION_API_URL`/`VISION_API_KEY` berilsa, rasm yoki skrinshot OCR va qisqa mazmun tahliliga yuboriladi. Kalitlar berilmaganida bot foydalanuvchiga bu integratsiya hali faollashtirilmaganini o‘z tilida tushuntiradi.
 
-Rejalashtirilgan postlar SQLite jadvaliga yoziladi va bot ishlayotgan paytda har 30 soniyada tekshiriladi; Render Free uyquga ketsa yoki standart fayl tizimi tozalansa, bunday jadval uchun persistent disk yoki tashqi baza kerak bo‘ladi. Admin o‘zining asosiy guruhida `/majburiy_qosh @boshqa_guruh 6soat` yoki `/majburiy_qosh -1001234567890 24soat` ni yuborib boshqa guruhni vaqtincha majburiy obunaga qo‘shadi. `12soat`, `24soat` yoki aniq tugash vaqti (`23:00`) ham berish mumkin. Vaqt berilmasa qo‘shilish doimiy bo‘ladi. `/majburiy_royxat` ro‘yxat va tugash vaqtini ko‘rsatadi, `/majburiy_ochir @boshqa_guruh` esa guruhni darhol olib tashlaydi. Aniq soat UTC bo‘yicha hisoblanadi. Bot maqsadli guruhda administrator bo‘lishi kerak.
+Rejalashtirilgan postlar SQLite jadvaliga yoziladi va bot ishlayotgan paytda har 30 soniyada tekshiriladi; Render Free uyquga ketsa yoki standart fayl tizimi tozalansa, bunday jadval uchun persistent disk yoki tashqi baza kerak bo‘ladi. Admin o‘zining asosiy guruhida `/majburiy_qosh @boshqa_guruh 6soat` yoki `/majburiy_qosh -1001234567890 24soat` ni yuborib boshqa guruhni vaqtincha majburiy obunaga qo‘shadi. `12soat`, `24soat` yoki aniq tugash vaqti (`23:00`) ham berish mumkin. Vaqt berilmasa qo‘shilish doimiy bo‘ladi. `/majburiy_royxat` ro‘yxat va tugash vaqtini ko‘rsatadi, `/majburiy_ochir @boshqa_guruh` esa guruhni darhol olib tashlaydi. Aniq soat UTC bo‘yicha hisoblanadi. `/obuna_statistika` admin uchun nechta noyob odam majburiy obunadan o‘tganini bugun, oxirgi 7 kun va umumiy kesimda ko‘rsatadi. Statistikada foydalanuvchi nomlari saqlanmaydi, faqat hisoblar yoziladi. Bot maqsadli guruhda administrator bo‘lishi kerak.
  `REQUIRED_CHANNEL_ID` va `REQUIRED_CHANNEL_URL` eski bitta kanal sozlamasi sifatida ham qo‘llab-quvvatlanadi. Voice-chat’da ko‘rinadigan ishtirokchi bo‘lish oddiy Telegram bot tokenidan tashqari userbot/MTProto akkauntini talab qiladi; bunday maxfiy ma’lumotni kodga yozish mumkin emas.
 
 ## Lokal tekshiruv

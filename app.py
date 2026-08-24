@@ -151,6 +151,13 @@ class Store:
                     created_at REAL NOT NULL,
                     expiry_at REAL
                 );
+                CREATE TABLE IF NOT EXISTS subscription_checks (
+                    scope_chat_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    required_chat_id TEXT NOT NULL,
+                    checked_at REAL NOT NULL,
+                    PRIMARY KEY (scope_chat_id, user_id, required_chat_id)
+                );
                 """
             )
             columns = {row["name"] for row in conn.execute("PRAGMA table_info(required_chats)").fetchall()}
@@ -271,6 +278,29 @@ class Store:
         self.purge_expired_required_chats()
         with self.connect() as conn:
             return list(conn.execute("SELECT chat_id,title,invite_url,expiry_at FROM required_chats ORDER BY title,chat_id").fetchall())
+
+    def record_subscription_pass(self, scope_chat_id: int, user_id: int, required_chat_ids: list[str]) -> None:
+        now = time.time()
+        with self.connect() as conn:
+            conn.executemany(
+                "INSERT INTO subscription_checks(scope_chat_id,user_id,required_chat_id,checked_at) VALUES(?,?,?,?) ON CONFLICT(scope_chat_id,user_id,required_chat_id) DO UPDATE SET checked_at=excluded.checked_at",
+                [(scope_chat_id, user_id, required_chat_id, now) for required_chat_id in required_chat_ids],
+            )
+
+    def subscription_stats(self, scope_chat_id: int) -> dict[str, Any]:
+        now = time.time()
+        day_start = now - 86400
+        week_start = now - 7 * 86400
+        with self.connect() as conn:
+            totals = conn.execute(
+                "SELECT COUNT(DISTINCT user_id) AS all_time, COUNT(DISTINCT CASE WHEN checked_at>=? THEN user_id END) AS today, COUNT(DISTINCT CASE WHEN checked_at>=? THEN user_id END) AS week FROM subscription_checks WHERE scope_chat_id=?",
+                (day_start, week_start, scope_chat_id),
+            ).fetchone()
+            per_chat = list(conn.execute(
+                "SELECT required_chat_id, COUNT(DISTINCT user_id) AS users FROM subscription_checks WHERE scope_chat_id=? GROUP BY required_chat_id ORDER BY required_chat_id",
+                (scope_chat_id,),
+            ).fetchall())
+        return {"all_time": int(totals["all_time"]), "today": int(totals["today"]), "week": int(totals["week"]), "per_chat": per_chat}
 
     def stats(self, chat_id: int) -> tuple[int, int, int]:
         with self.connect() as conn:
@@ -605,7 +635,8 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     members, points, warnings = store.stats(chat.id)
     recent = store.recent_actions(chat.id)
     audit_text = "\n".join(f"{row['admin_name'] or 'admin'} → {row['action']} → {row['target_name'] or '-'}" for row in recent) or "Hali admin amallari yo‘q."
-    await update.effective_message.reply_text(f"📊 Guruh statistikasi:\nKuzatilgan a’zolar: {members}\nJami ball: {points}\nOgohlantirishlar: {warnings}\n\nSo‘nggi admin amallari:\n{audit_text}")
+    subscription = store.subscription_stats(chat.id)
+    await update.effective_message.reply_text(f"📊 Guruh statistikasi:\nKuzatilgan a’zolar: {members}\nJami ball: {points}\nOgohlantirishlar: {warnings}\nMajburiy obunadan o‘tganlar: {subscription['all_time']} ta\n\nSo‘nggi admin amallari:\n{audit_text}")
 
 
 async def filter_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -793,9 +824,37 @@ async def subscription_command(update: Update, context: ContextTypes.DEFAULT_TYP
         if not active:
             missing.append(f"{title}: {invite_url}" if invite_url else title)
     if not missing:
+        scope_chat = update.effective_chat
+        if scope_chat:
+            store.record_subscription_pass(scope_chat.id, user.id, [chat_id for chat_id, _, _, _ in required])
         await update.effective_message.reply_text("Barcha majburiy obunalar tasdiqlandi.")
     else:
         await update.effective_message.reply_text("Avval quyidagi guruh yoki kanallarga kiring:\n" + "\n".join(missing) + "\n\nKeyin /obuna buyrug‘ini qayta yuboring.")
+
+
+async def subscription_stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await require_admin(update, context):
+        return
+    chat = update.effective_chat
+    if not chat or chat.type == ChatType.PRIVATE:
+        await update.effective_message.reply_text("Bu buyruqni guruh ichida yuboring.")
+        return
+    summary = store.subscription_stats(chat.id)
+    lines = [
+        "📈 Majburiy obuna statistikasi:",
+        f"Bugun o‘tganlar: {summary['today']} ta",
+        f"Oxirgi 7 kunda: {summary['week']} ta",
+        f"Umumiy noyob odamlar: {summary['all_time']} ta",
+    ]
+    per_chat = summary["per_chat"]
+    if per_chat:
+        lines.append("\nGuruhlar bo‘yicha:")
+        titles = {str(row["chat_id"]): str(row["title"]) for row in store.required_chats()}
+        for row in per_chat:
+            lines.append(f"- {titles.get(str(row['required_chat_id']), row['required_chat_id'])}: {int(row['users'])} ta")
+    else:
+        lines.append("\nHali hech kim /obuna orqali tasdiqlanmagan.")
+    await update.effective_message.reply_text("\n".join(lines))
 
 
 async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1020,6 +1079,7 @@ telegram_app.add_handler(CommandHandler(["blok", "ban"], ban_command))
 telegram_app.add_handler(CommandHandler(["blokdanchiqar", "unban"], unban_command))
 telegram_app.add_handler(CommandHandler(["hayda", "kick"], kick_command))
 telegram_app.add_handler(CommandHandler(["statistika", "stats"], stats_command))
+telegram_app.add_handler(CommandHandler(["obuna_statistika", "subscription_stats"], subscription_stats_command))
 telegram_app.add_handler(CommandHandler(["filtr", "filter"], filter_command))
 telegram_app.add_handler(CommandHandler(["sozlamalar", "settings"], settings_command))
 telegram_app.add_handler(CommandHandler(["xulosa", "summary"], summary_command))
