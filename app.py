@@ -66,8 +66,9 @@ MEDIA_MAX_BYTES = read_positive_int("MEDIA_MAX_BYTES", 12 * 1024 * 1024)
 REQUIRED_CHANNEL_ID = os.environ.get("REQUIRED_CHANNEL_ID", "").strip()
 REQUIRED_CHANNEL_URL = os.environ.get("REQUIRED_CHANNEL_URL", "").strip()
 BOT_DB_PATH_RAW = os.environ.get("BOT_DB_PATH", "").strip()
-DB_PATH = Path(BOT_DB_PATH_RAW or "/tmp/smart-community-bot.sqlite3")
-DB_STORAGE_MODE = "configured" if BOT_DB_PATH_RAW else "ephemeral"
+DB_PATH = Path(BOT_DB_PATH_RAW or "/tmp/smart-community-bot.sqlite3").expanduser()
+DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+DB_STORAGE_MODE = "durable" if str(DB_PATH).startswith(("/var/data/", "/data/", "/mnt/")) else "ephemeral"
 WEBHOOK_PATH = f"/telegram-webhook/{hashlib.sha256(WEBHOOK_SECRET.encode('utf-8')).hexdigest()[:24]}"
 
 app = FastAPI(title="Smart Community Bot")
