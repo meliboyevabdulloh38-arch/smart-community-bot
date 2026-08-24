@@ -25,7 +25,7 @@ Render Environment Variables bo‘limida quyidagilar bo‘lishi kerak:
 
 ## Ishlayotgan imkoniyatlar
 
-Shaxsiy chatda bot `/start`, `/yordam`, `/til`, `/holat`, `/oyin` va `/ball` buyruqlarini qabul qiladi. Guruhlarda bot har bir xabarga javob bermaydi: foydalanuvchi botni `@mention` qilishi yoki bot xabariga reply qilishi kerak.
+Shaxsiy chatda bot `/start`, `/yordam`, `/til`, `/holat`, `/oyin` va `/ball` buyruqlarini qabul qiladi. Guruhlarda bot oddiy matnli xabarlarni ham avtomatik ko‘rib chiqib, foydalanuvchi tilida qisqa javob beradi. `@mention` yoki bot xabariga reply qilish majburiy emas.
 
 Guruh adminlari foydalanuvchi xabariga reply qilib o‘zbekcha buyruqlarni ishlatishi mumkin:
 
@@ -43,7 +43,7 @@ Guruh adminlari foydalanuvchi xabariga reply qilib o‘zbekcha buyruqlarni ishla
 | `/sozlamalar` | Guruh sozlamalarini ko‘rsatadi |
 | `/xulosa` | Guruh faoliyati bo‘yicha qisqa xulosa |
 
-SQLite xotirasi processed Telegram update ID’larini saqlaydi. Shu sababli webhook retry yoki server restart paytida ayni update qayta kelib qolsa, bot uni ikkinchi marta javob bermasdan tashlab yuboradi.
+Telegram guruhlarida barcha oddiy xabarlarni olish uchun BotFather’dagi Privacy Mode’ni o‘chirish yoki botni administrator qilish kerak. Anti-spam filtri takroriy va reklama xabarlarini javobsiz qoldiradi. SQLite xotirasi processed Telegram update ID’larini saqlaydi. Shu sababli webhook retry yoki server restart paytida ayni update qayta kelib qolsa, bot uni ikkinchi marta javob bermasdan tashlab yuboradi.
 
 ## Ixtiyoriy kengaytmalar
 

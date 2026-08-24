@@ -269,7 +269,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "/oyin — tezkor savol-o‘yin\n/ball — ballar reytingi\n\n"
         "Admin buyruqlari:\n/ogohlantir, /jim, /jimdanchiqar, /blok, /blokdanchiqar, /hayda\n"
         "/statistika, /filtr, /xulosa, /sozlamalar\n\n"
-        "Admin buyruqlari odatda nishon foydalanuvchining xabariga reply qilib ishlatiladi."
+        "Guruhda oddiy xabarlar ham avtomatik ko‘rib chiqiladi; admin buyruqlari nishon foydalanuvchining xabariga reply qilib ishlatiladi."
     )
 
 
@@ -516,10 +516,9 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         except Exception:
             pass
 
-        mentioned = f"@{context.bot.username}".lower() in text.lower() if context.bot.username else False
-        reply_to_bot = bool(message.reply_to_message and message.reply_to_message.from_user and message.reply_to_message.from_user.id == context.bot.id)
-        if not mentioned and not reply_to_bot:
-            return
+        # Automatic conversation mode: every non-command group message reaches the
+        # response engine after moderation checks. Mentions and replies are still
+        # supported, but are no longer required.
 
     clean = MENTION_RE.sub("", text).strip()
     language = detect_language(clean)

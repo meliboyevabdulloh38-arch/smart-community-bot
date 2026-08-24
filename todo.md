@@ -22,3 +22,11 @@
 - [ ] Reproduce a safe local update-processing path without sending test messages.
 - [ ] Apply the smallest fix, redeploy, and verify the live endpoint.
 - [ ] Ask the user to retry `/start` only after the deployment is confirmed live.
+
+## Automatic group conversation mode
+
+- [ ] Remove the mention/reply-only gate for ordinary group text messages.
+- [ ] Keep commands, admin messages, duplicate updates, and anti-spam handling safe.
+- [ ] Preserve a concise response policy so every group message does not create an excessively long reply.
+- [ ] Document that Telegram Privacy Mode must be disabled or the bot must be an administrator to receive all group messages.
+- [ ] Validate and redeploy the automatic participation mode.
