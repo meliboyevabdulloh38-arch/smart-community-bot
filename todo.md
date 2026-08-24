@@ -111,6 +111,9 @@ Voice-chat userbot/MTProto integration is paused by user request. Continue with 
 - [ ] Aggregate unique users for today, seven days, and all time.
 - [ ] Aggregate per-required-chat pass counts without exposing user identities.
 - [ ] Add Uzbek admin-only `/obuna_statistika` output and include a short summary in `/statistika`.
+- [ ] Store display name, username, and timestamp for users who successfully run `/obuna`.
+- [ ] Add admin-only `/obuna_kimlar` roster output with pagination or a safe limit.
+- [ ] Add optional per-group roster filtering without exposing lists to ordinary members.
 
 ## Next hardening pass
 

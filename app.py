@@ -155,6 +155,8 @@ class Store:
                     scope_chat_id INTEGER NOT NULL,
                     user_id INTEGER NOT NULL,
                     required_chat_id TEXT NOT NULL,
+                    display_name TEXT NOT NULL DEFAULT '',
+                    username TEXT NOT NULL DEFAULT '',
                     checked_at REAL NOT NULL,
                     PRIMARY KEY (scope_chat_id, user_id, required_chat_id)
                 );
@@ -163,6 +165,11 @@ class Store:
             columns = {row["name"] for row in conn.execute("PRAGMA table_info(required_chats)").fetchall()}
             if "expiry_at" not in columns:
                 conn.execute("ALTER TABLE required_chats ADD COLUMN expiry_at REAL")
+            subscription_columns = {row["name"] for row in conn.execute("PRAGMA table_info(subscription_checks)").fetchall()}
+            if "display_name" not in subscription_columns:
+                conn.execute("ALTER TABLE subscription_checks ADD COLUMN display_name TEXT NOT NULL DEFAULT ''")
+            if "username" not in subscription_columns:
+                conn.execute("ALTER TABLE subscription_checks ADD COLUMN username TEXT NOT NULL DEFAULT ''")
 
     def connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.path, timeout=10)
@@ -279,13 +286,19 @@ class Store:
         with self.connect() as conn:
             return list(conn.execute("SELECT chat_id,title,invite_url,expiry_at FROM required_chats ORDER BY title,chat_id").fetchall())
 
-    def record_subscription_pass(self, scope_chat_id: int, user_id: int, required_chat_ids: list[str]) -> None:
+    def record_subscription_pass(self, scope_chat_id: int, user_id: int, required_chat_ids: list[str], display_name: str = "", username: str = "") -> None:
         now = time.time()
         with self.connect() as conn:
             conn.executemany(
-                "INSERT INTO subscription_checks(scope_chat_id,user_id,required_chat_id,checked_at) VALUES(?,?,?,?) ON CONFLICT(scope_chat_id,user_id,required_chat_id) DO UPDATE SET checked_at=excluded.checked_at",
-                [(scope_chat_id, user_id, required_chat_id, now) for required_chat_id in required_chat_ids],
+                "INSERT INTO subscription_checks(scope_chat_id,user_id,required_chat_id,display_name,username,checked_at) VALUES(?,?,?,?,?,?) ON CONFLICT(scope_chat_id,user_id,required_chat_id) DO UPDATE SET display_name=excluded.display_name, username=excluded.username, checked_at=excluded.checked_at",
+                [(scope_chat_id, user_id, required_chat_id, display_name or "", username or "", now) for required_chat_id in required_chat_ids],
             )
+
+    def subscription_roster(self, scope_chat_id: int, required_chat_id: str = "", limit: int = 100) -> list[sqlite3.Row]:
+        with self.connect() as conn:
+            if required_chat_id:
+                return list(conn.execute("SELECT display_name,username,required_chat_id,checked_at FROM subscription_checks WHERE scope_chat_id=? AND required_chat_id=? ORDER BY checked_at DESC LIMIT ?", (scope_chat_id, required_chat_id, limit)).fetchall())
+            return list(conn.execute("SELECT display_name,username,required_chat_id,checked_at FROM subscription_checks WHERE scope_chat_id=? GROUP BY user_id ORDER BY checked_at DESC LIMIT ?", (scope_chat_id, limit)).fetchall())
 
     def subscription_stats(self, scope_chat_id: int) -> dict[str, Any]:
         now = time.time()
@@ -826,7 +839,7 @@ async def subscription_command(update: Update, context: ContextTypes.DEFAULT_TYP
     if not missing:
         scope_chat = update.effective_chat
         if scope_chat:
-            store.record_subscription_pass(scope_chat.id, user.id, [chat_id for chat_id, _, _, _ in required])
+            store.record_subscription_pass(scope_chat.id, user.id, [chat_id for chat_id, _, _, _ in required], user.full_name, user.username or "")
         await update.effective_message.reply_text("Barcha majburiy obunalar tasdiqlandi.")
     else:
         await update.effective_message.reply_text("Avval quyidagi guruh yoki kanallarga kiring:\n" + "\n".join(missing) + "\n\nKeyin /obuna buyrug‘ini qayta yuboring.")
@@ -854,6 +867,37 @@ async def subscription_stats_command(update: Update, context: ContextTypes.DEFAU
             lines.append(f"- {titles.get(str(row['required_chat_id']), row['required_chat_id'])}: {int(row['users'])} ta")
     else:
         lines.append("\nHali hech kim /obuna orqali tasdiqlanmagan.")
+    await update.effective_message.reply_text("\n".join(lines))
+
+
+async def subscription_roster_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await require_admin(update, context):
+        return
+    chat = update.effective_chat
+    if not chat or chat.type == ChatType.PRIVATE:
+        await update.effective_message.reply_text("Bu buyruqni guruh ichida yuboring.")
+        return
+    required_chat_id = ""
+    if context.args:
+        reference = context.args[0].strip()
+        if reference.startswith("https://t.me/"):
+            reference = "@" + reference.removeprefix("https://t.me/").strip("/").split("/")[0]
+        try:
+            target = await context.bot.get_chat(int(reference) if re.fullmatch(r"-?\d+", reference) else reference)
+            required_chat_id = str(target.id)
+        except Exception:
+            await update.effective_message.reply_text("Guruh topilmadi. @username yoki -100... ko‘rinishidagi ID ni tekshiring.")
+            return
+    rows = store.subscription_roster(chat.id, required_chat_id)
+    if not rows:
+        await update.effective_message.reply_text("Hali /obuna orqali muvaffaqiyatli o‘tganlar yo‘q.")
+        return
+    lines = ["Majburiy obunadan o‘tganlar (maksimum 100 ta):"]
+    for index, row in enumerate(rows, 1):
+        name = str(row["display_name"] or "Noma’lum ism")
+        username = f"@{row['username']}" if row["username"] else "username yo‘q"
+        checked = datetime.fromtimestamp(float(row["checked_at"]), timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        lines.append(f"{index}. {name} — {username} — {checked}")
     await update.effective_message.reply_text("\n".join(lines))
 
 
@@ -1080,6 +1124,7 @@ telegram_app.add_handler(CommandHandler(["blokdanchiqar", "unban"], unban_comman
 telegram_app.add_handler(CommandHandler(["hayda", "kick"], kick_command))
 telegram_app.add_handler(CommandHandler(["statistika", "stats"], stats_command))
 telegram_app.add_handler(CommandHandler(["obuna_statistika", "subscription_stats"], subscription_stats_command))
+telegram_app.add_handler(CommandHandler(["obuna_kimlar", "subscription_users"], subscription_roster_command))
 telegram_app.add_handler(CommandHandler(["filtr", "filter"], filter_command))
 telegram_app.add_handler(CommandHandler(["sozlamalar", "settings"], settings_command))
 telegram_app.add_handler(CommandHandler(["xulosa", "summary"], summary_command))
