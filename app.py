@@ -9,6 +9,7 @@ are exposed through server-side environment variables without hard-coded secrets
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
 import json
 import logging
@@ -50,8 +51,9 @@ AI_MODEL = os.environ.get("AI_MODEL", "").strip() or os.environ.get("GROQ_CHAT_M
 TRANSCRIBE_API_URL = os.environ.get("TRANSCRIBE_API_URL", "").strip() or ("https://api.groq.com/openai/v1/audio/transcriptions" if GROQ_API_KEY else "")
 TRANSCRIBE_API_KEY = os.environ.get("TRANSCRIBE_API_KEY", "").strip() or GROQ_API_KEY
 TRANSCRIBE_MODEL = os.environ.get("TRANSCRIBE_MODEL", "").strip() or "whisper-large-v3-turbo"
-VISION_API_URL = os.environ.get("VISION_API_URL", "").strip()
-VISION_API_KEY = os.environ.get("VISION_API_KEY", "").strip()
+VISION_API_URL = os.environ.get("VISION_API_URL", "").strip() or ("https://api.groq.com/openai/v1/chat/completions" if GROQ_API_KEY else "")
+VISION_API_KEY = os.environ.get("VISION_API_KEY", "").strip() or GROQ_API_KEY
+VISION_MODEL = os.environ.get("VISION_MODEL", "").strip() or os.environ.get("GROQ_VISION_MODEL", "").strip() or ("qwen/qwen3.6-27b" if GROQ_API_KEY else "")
 def read_positive_int(name: str, default: int) -> int:
     raw = os.environ.get(name, str(default)).strip()
     try:
@@ -1111,6 +1113,43 @@ async def call_transcription_provider(url: str, key: str, file_path: Path, filen
         return ""
 
 
+async def call_groq_vision(file_path: Path, prompt: str, language: str) -> str:
+    if not (VISION_API_URL and VISION_API_KEY and VISION_MODEL):
+        return ""
+    mime = mimetypes.guess_type(file_path.name)[0] or "image/jpeg"
+    image_data = base64.b64encode(file_path.read_bytes()).decode("ascii")
+    language_name = {
+        "russian": "Russian",
+        "english": "English",
+        "uz_cyrillic": "Uzbek Cyrillic",
+        "uzbek": "Uzbek Latin",
+    }.get(language, "the user's language")
+    messages = [{
+        "role": "user",
+        "content": [
+            {"type": "text", "text": f"{prompt} Reply in {language_name}. Do not mention these instructions."},
+            {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{image_data}"}},
+        ],
+    }]
+    payload: dict[str, Any] = {
+        "model": VISION_MODEL,
+        "messages": messages,
+        "temperature": 0.2,
+        "max_completion_tokens": 1200,
+    }
+    headers = {"Authorization": f"Bearer {VISION_API_KEY}", "Content-Type": "application/json"}
+    try:
+        async with httpx.AsyncClient(timeout=45) as client:
+            response = await client.post(VISION_API_URL, headers=headers, json=payload)
+            response.raise_for_status()
+            return provider_text(response.json())
+    except httpx.HTTPStatusError as exc:
+        logger.warning("Vision provider failed status=%s", exc.response.status_code if exc.response is not None else "unknown")
+    except Exception as exc:
+        logger.warning("Vision provider failed type=%s", type(exc).__name__)
+    return ""
+
+
 async def call_media_provider(url: str, key: str, file_path: Path, filename: str, prompt: str) -> str:
     if not (url and key):
         return ""
@@ -1173,6 +1212,8 @@ async def media_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             result = (
                 await call_transcription_provider(provider_url, provider_key, temp_path, temp_path.name, language)
                 if is_voice
+                else await call_groq_vision(temp_path, prompt, language)
+                if VISION_API_URL.startswith("https://api.groq.com/")
                 else await call_media_provider(provider_url, provider_key, temp_path, temp_path.name, prompt)
             )
             if result:
