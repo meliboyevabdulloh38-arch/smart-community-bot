@@ -46,7 +46,7 @@ AI_PROVIDER = os.environ.get("AI_PROVIDER", "").strip().lower()
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "").strip()
 AI_API_URL = os.environ.get("AI_API_URL", "").strip() or ("https://api.groq.com/openai/v1/chat/completions" if GROQ_API_KEY else "")
 AI_API_KEY = os.environ.get("AI_API_KEY", "").strip() or GROQ_API_KEY
-AI_MODEL = os.environ.get("AI_MODEL", "").strip() or os.environ.get("GROQ_CHAT_MODEL", "").strip() or ("llama-3.3-70b-versatile" if GROQ_API_KEY else "")
+AI_MODEL = os.environ.get("AI_MODEL", "").strip() or os.environ.get("GROQ_CHAT_MODEL", "").strip() or ("openai/gpt-oss-120b" if GROQ_API_KEY else "")
 TRANSCRIBE_API_URL = os.environ.get("TRANSCRIBE_API_URL", "").strip() or ("https://api.groq.com/openai/v1/audio/transcriptions" if GROQ_API_KEY else "")
 TRANSCRIBE_API_KEY = os.environ.get("TRANSCRIBE_API_KEY", "").strip() or GROQ_API_KEY
 TRANSCRIBE_MODEL = os.environ.get("TRANSCRIBE_MODEL", "").strip() or "whisper-large-v3-turbo"
@@ -1020,8 +1020,11 @@ async def maybe_ai_reply(question: str, language: str, chat_id: int | None = Non
                 content = choices[0].get("message", {}).get("content")
                 if content:
                     return str(content)[:3900]
+    except httpx.HTTPStatusError as exc:
+        detail = exc.response.text[:240].replace("\n", " ") if exc.response is not None else ""
+        logger.warning("Optional AI provider failed status=%s detail=%s", exc.response.status_code if exc.response is not None else "unknown", detail)
     except Exception as exc:
-        logger.warning("Optional AI provider failed: %s", exc)
+        logger.warning("Optional AI provider failed type=%s", type(exc).__name__)
     return None
 
 
