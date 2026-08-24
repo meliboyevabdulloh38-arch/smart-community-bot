@@ -53,7 +53,10 @@ Guruh adminlari foydalanuvchi xabariga reply qilib o‘zbekcha buyruqlarni ishla
 | `/xulosa` | Guruh faoliyati bo‘yicha qisqa xulosa |
 | `/rejalashtir 18:30 | matn` | Har kuni UTC bo‘yicha post yuborishni rejalashtiradi |
 | `/rejalashtir` | Shu guruhdagi rejalashtirilgan postlarni ko‘rsatadi |
-| `/obuna` | Majburiy kanal obunasini tekshiradi; faqat `REQUIRED_CHANNEL_ID` berilganda ishlaydi |
+| `/obuna` | Barcha majburiy guruh va kanallarga a’zolikni tekshiradi |
+| `/majburiy_qosh` | Admin turgan guruhni majburiy obuna ro‘yxatiga qo‘shadi |
+| `/majburiy_royxat` | Majburiy obuna guruhlari ro‘yxatini ko‘rsatadi |
+| `/majburiy_ochir` | Admin turgan guruhni ro‘yxatdan olib tashlaydi |
 
 Telegram guruhlarida barcha oddiy xabarlarni olish uchun BotFather’dagi Privacy Mode’ni o‘chirish yoki botni administrator qilish kerak. Anti-spam filtri takroriy va reklama xabarlarini javobsiz qoldiradi. SQLite xotirasi processed Telegram update ID’larini saqlaydi. Shu sababli webhook retry yoki server restart paytida ayni update qayta kelib qolsa, bot uni ikkinchi marta javob bermasdan tashlab yuboradi. Adminlarning ogohlantirish, jim qilish, bloklash, chiqarish va filtr amallari `moderation_actions` jadvalida qayd etilib, `/statistika` javobida so‘nggi amallar ko‘rsatiladi.
 
@@ -61,7 +64,7 @@ Telegram guruhlarida barcha oddiy xabarlarni olish uchun BotFather’dagi Privac
 
 Agar `AI_API_URL` va `AI_API_KEY` berilsa, bot OpenAI-compatible chat endpoint’iga savol yuborib, foydalanuvchi tilida javob qaytarishga urinadi. Ovozli xabar va rasmlar xavfsiz hajm limiti bilan qabul qilinadi. `TRANSCRIBE_API_URL`/`TRANSCRIBE_API_KEY` berilsa, ovoz fayli provider’ga yuborilib matnga aylantiriladi; `VISION_API_URL`/`VISION_API_KEY` berilsa, rasm yoki skrinshot OCR va qisqa mazmun tahliliga yuboriladi. Kalitlar berilmaganida bot foydalanuvchiga bu integratsiya hali faollashtirilmaganini o‘z tilida tushuntiradi.
 
-Rejalashtirilgan postlar SQLite jadvaliga yoziladi va bot ishlayotgan paytda har 30 soniyada tekshiriladi; Render Free uyquga ketsa yoki standart fayl tizimi tozalansa, bunday jadval uchun persistent disk yoki tashqi baza kerak bo‘ladi. `REQUIRED_CHANNEL_ID` berilsa, `/obuna` orqali kanalga a’zolik tekshiriladi; bot kanalni o‘zi yaratmaydi va foydalanuvchining maxfiy ma’lumotlarini so‘ramaydi. Voice-chat’da ko‘rinadigan ishtirokchi bo‘lish oddiy Telegram bot tokenidan tashqari userbot/MTProto akkauntini talab qiladi; bunday maxfiy ma’lumotni kodga yozish mumkin emas.
+Rejalashtirilgan postlar SQLite jadvaliga yoziladi va bot ishlayotgan paytda har 30 soniyada tekshiriladi; Render Free uyquga ketsa yoki standart fayl tizimi tozalansa, bunday jadval uchun persistent disk yoki tashqi baza kerak bo‘ladi. Admin majburiy obunaga qo‘shmoqchi bo‘lgan guruhning ichida `/majburiy_qosh` ni yuboradi. Kerak bo‘lsa `/majburiy_royxat` bilan ro‘yxat ko‘riladi, `/majburiy_ochir` bilan ayni guruh olib tashlanadi. Bot o‘sha guruhda a’zo yoki admin bo‘lishi kerak. `REQUIRED_CHANNEL_ID` va `REQUIRED_CHANNEL_URL` eski bitta kanal sozlamasi sifatida ham qo‘llab-quvvatlanadi. Voice-chat’da ko‘rinadigan ishtirokchi bo‘lish oddiy Telegram bot tokenidan tashqari userbot/MTProto akkauntini talab qiladi; bunday maxfiy ma’lumotni kodga yozish mumkin emas.
 
 ## Lokal tekshiruv
 

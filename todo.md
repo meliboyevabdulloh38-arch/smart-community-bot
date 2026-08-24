@@ -82,3 +82,15 @@ Voice-chat userbot/MTProto integration is paused by user request. Continue with 
 - [ ] Validate scheduling and subscription checks with safe disabled-default behavior.
 - [ ] Confirm the live health endpoint after the latest deployment.
 - [ ] Keep voice-chat credentials and account setup out of the current deployment.
+
+## Mandatory subscription fix
+
+- [ ] Confirm the exact channel username or numeric channel ID and public invite link.
+- [ ] Confirm that Dadasi is an administrator in the channel or group being checked.
+- [ ] Add the channel settings to Render Environment Variables without exposing secrets.
+- [ ] Redeploy and test `/obuna` with a subscribed and unsubscribed account.
+- [ ] Support multiple required groups or channels instead of only one configured chat.
+- [ ] Keep a per-chat invite link so the user sees exactly which subscriptions are missing.
+- [ ] Let group admins add the current group with an Uzbek bot command.
+- [ ] Let group admins list and remove required groups with Uzbek bot commands.
+- [ ] Make `/obuna` check every administrator-configured required group.

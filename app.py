@@ -131,6 +131,13 @@ class Store:
                     enabled INTEGER NOT NULL DEFAULT 1,
                     created_at REAL NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS required_chats (
+                    chat_id INTEGER PRIMARY KEY,
+                    title TEXT NOT NULL DEFAULT '',
+                    invite_url TEXT NOT NULL DEFAULT '',
+                    added_by INTEGER NOT NULL,
+                    created_at REAL NOT NULL
+                );
                 """
             )
 
@@ -231,6 +238,18 @@ class Store:
     def mark_schedule_sent(self, schedule_id: int, date_key: str) -> None:
         with self.connect() as conn:
             conn.execute("UPDATE scheduled_posts SET last_sent_date=? WHERE id=?", (date_key, schedule_id))
+
+    def add_required_chat(self, chat_id: int, title: str, invite_url: str, added_by: int) -> None:
+        with self.connect() as conn:
+            conn.execute("INSERT INTO required_chats(chat_id,title,invite_url,added_by,created_at) VALUES(?,?,?,?,?) ON CONFLICT(chat_id) DO UPDATE SET title=excluded.title, invite_url=excluded.invite_url, added_by=excluded.added_by", (chat_id, title or "", invite_url or "", added_by, time.time()))
+
+    def remove_required_chat(self, chat_id: int) -> None:
+        with self.connect() as conn:
+            conn.execute("DELETE FROM required_chats WHERE chat_id=?", (chat_id,))
+
+    def required_chats(self) -> list[sqlite3.Row]:
+        with self.connect() as conn:
+            return list(conn.execute("SELECT chat_id,title,invite_url FROM required_chats ORDER BY title,chat_id").fetchall())
 
     def stats(self, chat_id: int) -> tuple[int, int, int]:
         with self.connect() as conn:
@@ -617,23 +636,75 @@ async def schedule_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     await update.effective_message.reply_text(f"Post {post_time} UTC vaqtiga rejalashtirildi.")
 
 
+async def required_add_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await require_admin(update, context):
+        return
+    chat = update.effective_chat
+    admin = update.effective_user
+    if not chat or not admin or chat.type == ChatType.PRIVATE:
+        await update.effective_message.reply_text("Bu buyruqni majburiy obunaga qo‘shiladigan guruhning ichida yuboring.")
+        return
+    invite_url = f"https://t.me/{chat.username}" if chat.username else ""
+    if not invite_url:
+        try:
+            invite_url = await context.bot.export_chat_invite_link(chat.id)
+        except Exception:
+            invite_url = ""
+    store.add_required_chat(chat.id, chat.title or str(chat.id), invite_url, admin.id)
+    audit(update, "majburiy-obuna-qo‘shish", details=str(chat.id))
+    await update.effective_message.reply_text("Bu guruh majburiy obuna ro‘yxatiga qo‘shildi.")
+
+
+async def required_list_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await require_admin(update, context):
+        return
+    rows = store.required_chats()
+    if not rows and not REQUIRED_CHANNEL_ID:
+        await update.effective_message.reply_text("Majburiy obuna ro‘yxati bo‘sh.")
+        return
+    lines = ["Majburiy obuna guruhlari:"]
+    for row in rows:
+        lines.append(f"- {row['title']} ({row['chat_id']})")
+    if REQUIRED_CHANNEL_ID:
+        lines.append(f"- Sozlamadagi kanal: {REQUIRED_CHANNEL_ID}")
+    await update.effective_message.reply_text("\n".join(lines))
+
+
+async def required_remove_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await require_admin(update, context):
+        return
+    chat = update.effective_chat
+    if not chat or chat.type == ChatType.PRIVATE:
+        await update.effective_message.reply_text("Bu buyruqni o‘chiriladigan guruh ichida yuboring.")
+        return
+    store.remove_required_chat(chat.id)
+    audit(update, "majburiy-obuna-o‘chirish", details=str(chat.id))
+    await update.effective_message.reply_text("Bu guruh majburiy obuna ro‘yxatidan olib tashlandi.")
+
+
 async def subscription_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     if not user:
         return
-    if not REQUIRED_CHANNEL_ID:
-        await update.effective_message.reply_text("Majburiy obuna tekshiruvi hali sozlanmagan.")
+    required = [(str(row["chat_id"]), str(row["title"]), str(row["invite_url"])) for row in store.required_chats()]
+    if REQUIRED_CHANNEL_ID and not any(chat_id == REQUIRED_CHANNEL_ID for chat_id, _, _ in required):
+        required.append((REQUIRED_CHANNEL_ID, "Kerakli kanal", REQUIRED_CHANNEL_URL))
+    if not required:
+        await update.effective_message.reply_text("Majburiy obuna ro‘yxati bo‘sh. Admin guruh ichida /majburiy_qosh buyrug‘ini yuborsin.")
         return
-    try:
-        member = await context.bot.get_chat_member(REQUIRED_CHANNEL_ID, user.id)
-        active = member.status not in {ChatMemberStatus.LEFT, ChatMemberStatus.KICKED}
-    except Exception:
-        active = False
-    if active:
-        await update.effective_message.reply_text("Obunangiz tasdiqlandi.")
+    missing: list[str] = []
+    for chat_id, title, invite_url in required:
+        try:
+            member = await context.bot.get_chat_member(chat_id, user.id)
+            active = member.status not in {ChatMemberStatus.LEFT, ChatMemberStatus.KICKED}
+        except Exception:
+            active = False
+        if not active:
+            missing.append(f"{title}: {invite_url}" if invite_url else title)
+    if not missing:
+        await update.effective_message.reply_text("Barcha majburiy obunalar tasdiqlandi.")
     else:
-        suffix = f"\nKanal: {REQUIRED_CHANNEL_URL}" if REQUIRED_CHANNEL_URL else ""
-        await update.effective_message.reply_text("Avval kerakli kanalga obuna bo‘ling, keyin /obuna buyrug‘ini qayta yuboring." + suffix)
+        await update.effective_message.reply_text("Avval quyidagi guruh yoki kanallarga kiring:\n" + "\n".join(missing) + "\n\nKeyin /obuna buyrug‘ini qayta yuboring.")
 
 
 async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -863,6 +934,9 @@ telegram_app.add_handler(CommandHandler(["sozlamalar", "settings"], settings_com
 telegram_app.add_handler(CommandHandler(["xulosa", "summary"], summary_command))
 telegram_app.add_handler(CommandHandler(["rejalashtir", "schedule"], schedule_command))
 telegram_app.add_handler(CommandHandler(["obuna", "subscribe"], subscription_command))
+telegram_app.add_handler(CommandHandler(["majburiy_qosh", "obunagaqosh"], required_add_command))
+telegram_app.add_handler(CommandHandler(["majburiy_royxat", "obunalar"], required_list_command))
+telegram_app.add_handler(CommandHandler(["majburiy_ochir", "obunadanol"], required_remove_command))
 telegram_app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_handler))
 telegram_app.add_handler(MessageHandler(filters.VOICE | filters.PHOTO, media_handler))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
@@ -870,7 +944,8 @@ telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_ha
 
 @app.get("/")
 async def health() -> dict[str, Any]:
-    return {"status": "ok", "service": "smart-community-bot", "features": ["multilingual", "moderation", "anti-spam", "points", "games", "conversation-memory", "voice-provider-ready", "vision-ocr-provider-ready", "idempotent-updates"]}
+    return {"status": "ok", "service": "smart-community-bot", "features": ["multilingual", "moderation", "anti-spam", "points", "games", "conversation-memory", "voice-provider-ready", "vision-ocr-provider-ready", "self-service-subscription", "scheduled-posts", "idempotent-updates"
+]}
 
 
 @app.post(WEBHOOK_PATH)
