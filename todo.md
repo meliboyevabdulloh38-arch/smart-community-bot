@@ -13,3 +13,12 @@
 - [ ] Commit and upload the upgraded source to the private GitHub repository.
 - [ ] Redeploy on Render and verify the health endpoint and startup logs.
 - [ ] Provide the user with only a short Telegram test checklist.
+
+## Debugging `/start` response
+
+- [ ] Inspect Render startup logs for webhook initialization or Telegram API errors.
+- [ ] Check Telegram `getWebhookInfo` without exposing the bot token.
+- [ ] Verify that the deployed webhook URL and secret path match the application route.
+- [ ] Reproduce a safe local update-processing path without sending test messages.
+- [ ] Apply the smallest fix, redeploy, and verify the live endpoint.
+- [ ] Ask the user to retry `/start` only after the deployment is confirmed live.
