@@ -403,6 +403,36 @@ def reply_text(language: str, first_name: str, question: str) -> str:
     book_question = any(marker in normalized for marker in (
         "kitob", "o'qishga arzi", "o‘qishga arzi", "книг", "что почитать", "book", "read",
     ))
+    identity_question = any(marker in normalized for marker in ("kimsan", "kim bo‘lasan", "kim bo'lasan", "кто ты", "who are you"))
+    thanks = any(marker in normalized for marker in ("rahmat", "raxmat", "спасибо", "thanks", "thank you"))
+    capability_question = any(marker in normalized for marker in ("nima qila olasan", "nimalar qila olasan", "что ты умеешь", "what can you do"))
+
+    if thanks:
+        if language == "russian":
+            return "Пожалуйста. Если понадобится, разберём вопрос по шагам."
+        if language == "english":
+            return "You’re welcome. If needed, I can break the question down step by step."
+        if language == "uz_cyrillic":
+            return "Арзимайди. Керак бўлса, саволни босқичма-босқич тушунтираман."
+        return "Arzimaydi. Kerak bo‘lsa, savolni bosqichma-bosqich tushuntiraman."
+
+    if identity_question:
+        if language == "russian":
+            return "Я Dadasi — группа помощник: отвечаю на вопросы, помогаю администраторам и слежу за порядком."
+        if language == "english":
+            return "I’m Dadasi, a community assistant for questions, moderation, scheduled posts, and group activity."
+        if language == "uz_cyrillic":
+            return "Мен — Dadasi ботман: саволларга жавоб бераман, админларга ёрдамлашаман ва гуруҳ тартибини кузатаман."
+        return "Men Dadasi botman: savollarga javob beraman, adminlarga yordam beraman va guruh tartibini kuzataman."
+
+    if capability_question:
+        if language == "russian":
+            return "Я умею отвечать на вопросы, помогать с модерацией, фильтровать спам, проводить игры, считать баллы, планировать посты и проверять обязательную подписку."
+        if language == "english":
+            return "I can answer questions, help with moderation, filter spam, run games, track points, schedule posts, and check required subscriptions."
+        if language == "uz_cyrillic":
+            return "Мен саволларга жавоб бераман, модерацияга ёрдамлашаман, спамни филтрлайман, ўйин ўтказаман, балл санайман, пост режалайман ва мажбурий обунани текшираман."
+        return "Savollarga javob beraman, moderatsiyaga yordam beraman, spamni filtrlayman, o‘yin o‘tkazaman, ball sanayman, post rejalayman va majburiy obunani tekshiraman."
 
     if book_question:
         if language == "russian":
@@ -488,8 +518,8 @@ async def require_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> b
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     await update.effective_message.reply_text(
-        f"Salom, {user.first_name if user else 'do‘st'}! Men Smart Community Botman.\n\n"
-        "Savolingizni yozing yoki /yordam buyrug‘ini bosing. Guruhda meni @mention qiling yoki xabarimga reply qiling."
+        f"Salom, {user.first_name if user else 'do‘st'}! Men Dadasi botman.\n\n"
+        "Savolingizni yozing yoki /yordam buyrug‘ini bosing. Guruhda oddiy xabar yozsangiz ham suhbatga qo‘shilaman."
     )
 
 
@@ -499,8 +529,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "/start — ishga tushirish\n/yordam — imkoniyatlar\n/til — til rejimi\n/holat — server holati\n"
         "/oyin — tezkor savol-o‘yin\n/ball — ballar reytingi\n\n"
         "Admin buyruqlari:\n/ogohlantir, /jim, /jimdanchiqar, /blok, /blokdanchiqar, /hayda\n"
-        "/statistika, /filtr, /xulosa, /sozlamalar\n\n"
-        "Guruhda oddiy xabarlar ham avtomatik ko‘rib chiqiladi; admin buyruqlari nishon foydalanuvchining xabariga reply qilib ishlatiladi."
+        "/statistika, /filtr, /xulosa, /sozlamalar\n"
+        "/rejalashtir, /obuna, /obuna_statistika, /obuna_kimlar\n"
+        "/majburiy_qosh, /majburiy_royxat, /majburiy_ochir\n\n"
+        "Guruhdagi oddiy xabarlar avtomatik ko‘rib chiqiladi. Admin buyruqlarida kerak bo‘lsa nishon foydalanuvchining xabariga reply qiling."
     )
 
 
@@ -902,7 +934,7 @@ async def subscription_roster_command(update: Update, context: ContextTypes.DEFA
         return
     rows = store.subscription_roster(chat.id, required_chat_id, total, 0)
     messages: list[str] = []
-    current = [f"Majburiy obunadan o‘tganlar — jami {total} ta:"]
+    current = [f"Jami muvaffaqiyatli o‘tganlar: {total} ta", "Majburiy obunadan o‘tganlar:"]
     for index, row in enumerate(rows, 1):
         name = str(row["display_name"] or "Noma’lum ism")
         username = f"@{row['username']}" if row["username"] else "username yo‘q"

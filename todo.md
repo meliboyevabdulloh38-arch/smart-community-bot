@@ -116,10 +116,20 @@ Voice-chat userbot/MTProto integration is paused by user request. Continue with 
 - [ ] Add optional per-group roster filtering without exposing lists to ordinary members.
 - [ ] Remove the 100-user roster truncation from storage and reporting.
 - [ ] Add 40-user pagination for `/obuna_kimlar` and optional group/page arguments.
+
+## Remaining feature activation pass
+
+- [ ] Audit current Render environment and provider-ready feature flags.
+- [ ] Improve provider-free AI fallback quality and multilingual behavior.
+- [ ] Verify voice and image/OCR handlers remain safe when providers are absent.
+- [ ] Harden database path and restart behavior without exposing secrets.
+- [ ] Validate and deploy the next stable feature bundle.
 - [ ] Show the current page and total pages to admins.
 - [ ] Make `/obuna_kimlar` automatically send every roster entry from one command.
 - [ ] Split long reports into Telegram-safe messages without dropping entries.
 - [ ] Preserve optional target-group filtering for the one-command report.
+- [ ] Put an explicit total verified-subscriber count at the top of the first roster message.
+- [ ] Ensure the total is scoped correctly when an optional target group is provided.
 
 ## Next hardening pass
 
