@@ -114,6 +114,9 @@ Voice-chat userbot/MTProto integration is paused by user request. Continue with 
 - [ ] Store display name, username, and timestamp for users who successfully run `/obuna`.
 - [ ] Add admin-only `/obuna_kimlar` roster output with pagination or a safe limit.
 - [ ] Add optional per-group roster filtering without exposing lists to ordinary members.
+- [ ] Remove the 100-user roster truncation from storage and reporting.
+- [ ] Add 40-user pagination for `/obuna_kimlar` and optional group/page arguments.
+- [ ] Show the current page and total pages to admins.
 
 ## Next hardening pass
 

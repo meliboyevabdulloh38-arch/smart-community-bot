@@ -294,11 +294,19 @@ class Store:
                 [(scope_chat_id, user_id, required_chat_id, display_name or "", username or "", now) for required_chat_id in required_chat_ids],
             )
 
-    def subscription_roster(self, scope_chat_id: int, required_chat_id: str = "", limit: int = 100) -> list[sqlite3.Row]:
+    def subscription_roster_count(self, scope_chat_id: int, required_chat_id: str = "") -> int:
         with self.connect() as conn:
             if required_chat_id:
-                return list(conn.execute("SELECT display_name,username,required_chat_id,checked_at FROM subscription_checks WHERE scope_chat_id=? AND required_chat_id=? ORDER BY checked_at DESC LIMIT ?", (scope_chat_id, required_chat_id, limit)).fetchall())
-            return list(conn.execute("SELECT display_name,username,required_chat_id,checked_at FROM subscription_checks WHERE scope_chat_id=? GROUP BY user_id ORDER BY checked_at DESC LIMIT ?", (scope_chat_id, limit)).fetchall())
+                row = conn.execute("SELECT COUNT(DISTINCT user_id) AS total FROM subscription_checks WHERE scope_chat_id=? AND required_chat_id=?", (scope_chat_id, required_chat_id)).fetchone()
+            else:
+                row = conn.execute("SELECT COUNT(DISTINCT user_id) AS total FROM subscription_checks WHERE scope_chat_id=?", (scope_chat_id,)).fetchone()
+            return int(row["total"] if row else 0)
+
+    def subscription_roster(self, scope_chat_id: int, required_chat_id: str = "", limit: int = 40, offset: int = 0) -> list[sqlite3.Row]:
+        with self.connect() as conn:
+            if required_chat_id:
+                return list(conn.execute("SELECT display_name,username,required_chat_id,checked_at FROM subscription_checks WHERE scope_chat_id=? AND required_chat_id=? GROUP BY user_id ORDER BY checked_at DESC LIMIT ? OFFSET ?", (scope_chat_id, required_chat_id, limit, offset)).fetchall())
+            return list(conn.execute("SELECT display_name,username,required_chat_id,checked_at FROM subscription_checks WHERE scope_chat_id=? GROUP BY user_id ORDER BY checked_at DESC LIMIT ? OFFSET ?", (scope_chat_id, limit, offset)).fetchall())
 
     def subscription_stats(self, scope_chat_id: int) -> dict[str, Any]:
         now = time.time()
@@ -878,21 +886,35 @@ async def subscription_roster_command(update: Update, context: ContextTypes.DEFA
         await update.effective_message.reply_text("Bu buyruqni guruh ichida yuboring.")
         return
     required_chat_id = ""
+    page = 1
+    reference = ""
     if context.args:
-        reference = context.args[0].strip()
-        if reference.startswith("https://t.me/"):
-            reference = "@" + reference.removeprefix("https://t.me/").strip("/").split("/")[0]
-        try:
-            target = await context.bot.get_chat(int(reference) if re.fullmatch(r"-?\d+", reference) else reference)
-            required_chat_id = str(target.id)
-        except Exception:
-            await update.effective_message.reply_text("Guruh topilmadi. @username yoki -100... ko‘rinishidagi ID ni tekshiring.")
-            return
-    rows = store.subscription_roster(chat.id, required_chat_id)
+        if len(context.args) == 1 and context.args[0].isdigit():
+            page = max(1, int(context.args[0]))
+        else:
+            reference = context.args[0].strip()
+            if len(context.args) > 1 and context.args[1].isdigit():
+                page = max(1, int(context.args[1]))
+        if reference:
+            if reference.startswith("https://t.me/"):
+                reference = "@" + reference.removeprefix("https://t.me/").strip("/").split("/")[0]
+            try:
+                target = await context.bot.get_chat(int(reference) if re.fullmatch(r"-?\d+", reference) else reference)
+                required_chat_id = str(target.id)
+            except Exception:
+                await update.effective_message.reply_text("Guruh topilmadi. @username yoki -100... ko‘rinishidagi ID ni tekshiring.")
+                return
+    page_size = 40
+    total = store.subscription_roster_count(chat.id, required_chat_id)
+    total_pages = max(1, (total + page_size - 1) // page_size)
+    if page > total_pages:
+        await update.effective_message.reply_text(f"Bu sahifa mavjud emas. Jami {total_pages} ta sahifa bor.")
+        return
+    rows = store.subscription_roster(chat.id, required_chat_id, page_size, (page - 1) * page_size)
     if not rows:
         await update.effective_message.reply_text("Hali /obuna orqali muvaffaqiyatli o‘tganlar yo‘q.")
         return
-    lines = ["Majburiy obunadan o‘tganlar (maksimum 100 ta):"]
+    lines = [f"Majburiy obunadan o‘tganlar — {page}/{total_pages}-sahifa (jami {total} ta):"]
     for index, row in enumerate(rows, 1):
         name = str(row["display_name"] or "Noma’lum ism")
         username = f"@{row['username']}" if row["username"] else "username yo‘q"
