@@ -636,23 +636,55 @@ async def schedule_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     await update.effective_message.reply_text(f"Post {post_time} UTC vaqtiga rejalashtirildi.")
 
 
+async def resolve_required_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    current = update.effective_chat
+    if not current:
+        return None
+    reference = context.args[0].strip() if context.args else ""
+    if not reference:
+        target = current
+    else:
+        if reference.startswith("https://t.me/"):
+            reference = "@" + reference.removeprefix("https://t.me/").strip("/").split("/")[0]
+        try:
+            lookup = int(reference) if re.fullmatch(r"-?\d+", reference) else reference
+            target = await context.bot.get_chat(lookup)
+        except Exception:
+            await update.effective_message.reply_text("Bu guruh topilmadi. @username yoki -100... ko‘rinishidagi ID ni tekshiring.")
+            return None
+    if target.type == ChatType.PRIVATE:
+        await update.effective_message.reply_text("Majburiy obunaga shaxsiy akkauntni qo‘shib bo‘lmaydi.")
+        return None
+    try:
+        me = await context.bot.get_me()
+        bot_member = await context.bot.get_chat_member(target.id, me.id)
+        if bot_member.status not in {ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER}:
+            await update.effective_message.reply_text("Botni avval shu maqsadli guruh yoki kanalda administrator qiling.")
+            return None
+    except Exception:
+        await update.effective_message.reply_text("Bot bu guruhni tekshira olmayapti. Botni guruhga qo‘shib administrator qiling.")
+        return None
+    return target
+
+
 async def required_add_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await require_admin(update, context):
         return
-    chat = update.effective_chat
     admin = update.effective_user
-    if not chat or not admin or chat.type == ChatType.PRIVATE:
-        await update.effective_message.reply_text("Bu buyruqni majburiy obunaga qo‘shiladigan guruhning ichida yuboring.")
+    if not admin:
         return
-    invite_url = f"https://t.me/{chat.username}" if chat.username else ""
+    target = await resolve_required_chat(update, context)
+    if not target:
+        return
+    invite_url = f"https://t.me/{target.username}" if target.username else ""
     if not invite_url:
         try:
-            invite_url = await context.bot.export_chat_invite_link(chat.id)
+            invite_url = await context.bot.export_chat_invite_link(target.id)
         except Exception:
             invite_url = ""
-    store.add_required_chat(chat.id, chat.title or str(chat.id), invite_url, admin.id)
-    audit(update, "majburiy-obuna-qo‘shish", details=str(chat.id))
-    await update.effective_message.reply_text("Bu guruh majburiy obuna ro‘yxatiga qo‘shildi.")
+    store.add_required_chat(target.id, target.title or str(target.id), invite_url, admin.id)
+    audit(update, "majburiy-obuna-qo‘shish", details=f"{target.title or target.id} ({target.id})")
+    await update.effective_message.reply_text(f"{target.title or target.id} majburiy obuna ro‘yxatiga qo‘shildi.")
 
 
 async def required_list_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -673,13 +705,24 @@ async def required_list_command(update: Update, context: ContextTypes.DEFAULT_TY
 async def required_remove_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await require_admin(update, context):
         return
-    chat = update.effective_chat
-    if not chat or chat.type == ChatType.PRIVATE:
-        await update.effective_message.reply_text("Bu buyruqni o‘chiriladigan guruh ichida yuboring.")
+    current = update.effective_chat
+    if not current or current.type == ChatType.PRIVATE:
+        await update.effective_message.reply_text("Bu buyruqni guruh ichida yuboring.")
         return
-    store.remove_required_chat(chat.id)
-    audit(update, "majburiy-obuna-o‘chirish", details=str(chat.id))
-    await update.effective_message.reply_text("Bu guruh majburiy obuna ro‘yxatidan olib tashlandi.")
+    if context.args:
+        reference = context.args[0].strip()
+        if reference.startswith("https://t.me/"):
+            reference = "@" + reference.removeprefix("https://t.me/").strip("/").split("/")[0]
+        try:
+            target = await context.bot.get_chat(int(reference) if re.fullmatch(r"-?\d+", reference) else reference)
+        except Exception:
+            await update.effective_message.reply_text("Bu guruh topilmadi. @username yoki -100... ko‘rinishidagi ID ni tekshiring.")
+            return
+    else:
+        target = current
+    store.remove_required_chat(target.id)
+    audit(update, "majburiy-obuna-o‘chirish", details=f"{target.title or target.id} ({target.id})")
+    await update.effective_message.reply_text(f"{target.title or target.id} majburiy obuna ro‘yxatidan olib tashlandi.")
 
 
 async def subscription_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

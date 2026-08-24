@@ -94,3 +94,6 @@ Voice-chat userbot/MTProto integration is paused by user request. Continue with 
 - [ ] Let group admins add the current group with an Uzbek bot command.
 - [ ] Let group admins list and remove required groups with Uzbek bot commands.
 - [ ] Make `/obuna` check every administrator-configured required group.
+- [ ] Accept a target group or channel username/ID in `/majburiy_qosh` from the current admin group.
+- [ ] Accept a target group or channel username/ID in `/majburiy_ochir` from the current admin group.
+- [ ] Confirm the bot can access the target chat and return a clear permission error if it cannot.
