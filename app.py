@@ -447,7 +447,15 @@ telegram_app = Application.builder().token(BOT_TOKEN or "000000:invalid").update
 
 UZ_CYR_MARKERS = set("қғҳўҚҒҲЎ")
 RUS_MARKERS = set("ыэъёЫЭЪЁ")
-EN_MARKERS = {"the", "what", "how", "why", "hello", "please", "can", "help", "is", "are"}
+EN_MARKERS = {
+    "the", "what", "how", "why", "hello", "please", "can", "help", "is", "are",
+    "tell", "about", "interesting", "fact", "facts", "one", "this", "that", "you",
+    "your", "could", "would", "explain", "give", "show", "does", "do", "me",
+}
+RUS_WORD_MARKERS = {
+    "расскажи", "расскажите", "интересный", "интересные", "факт", "факты", "один",
+    "про", "об", "обо", "почему", "как", "что", "можешь", "помоги", "помочь",
+}
 LINK_RE = re.compile(r"(?:https?://|t\.me/|www\.)", re.IGNORECASE)
 MENTION_RE = re.compile(r"@\w+")
 
@@ -457,7 +465,7 @@ def detect_language(text: str) -> str:
     words = set(re.findall(r"[\wʻ’'-]+", lower, flags=re.UNICODE))
     if any(char in text for char in UZ_CYR_MARKERS):
         return "uz_cyrillic"
-    if any(char in text for char in RUS_MARKERS):
+    if any(char in text for char in RUS_MARKERS) or words & RUS_WORD_MARKERS:
         return "russian"
     if words & EN_MARKERS:
         return "english"
