@@ -616,6 +616,11 @@ def admin_guide_markup(page: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([buttons])
 
 
+def admin_guide_plain_text(text: str) -> str:
+    """Return readable text when Telegram rejects Markdown entities."""
+    return text.replace("*", "").replace("\\_", "_")
+
+
 async def admin_guide_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     if not query or not query.data or not query.message:
@@ -629,7 +634,26 @@ async def admin_guide_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         page = max(0, min(int(action), len(ADMIN_GUIDE_PAGES) - 1))
     except ValueError:
         page = 0
-    await query.edit_message_text(ADMIN_GUIDE_PAGES[page], parse_mode="Markdown", reply_markup=admin_guide_markup(page))
+    page_text = ADMIN_GUIDE_PAGES[page]
+    # Pages 3/4 contain underscore-heavy bot commands; plain text avoids Markdown parsing errors.
+    if page >= 2:
+        await query.edit_message_text(
+            admin_guide_plain_text(page_text),
+            reply_markup=admin_guide_markup(page),
+        )
+        return
+    try:
+        await query.edit_message_text(
+            page_text,
+            parse_mode="Markdown",
+            reply_markup=admin_guide_markup(page),
+        )
+    except Exception:
+        logger.warning("Markdown guide page %s failed; using plain text", page)
+        await query.edit_message_text(
+            admin_guide_plain_text(page_text),
+            reply_markup=admin_guide_markup(page),
+        )
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
