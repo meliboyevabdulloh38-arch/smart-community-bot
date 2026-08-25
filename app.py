@@ -33,11 +33,12 @@ from typing import Any, Optional
 
 import httpx
 from fastapi import FastAPI, Request
-from telegram import ChatPermissions, Update
+from telegram import ChatPermissions, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ChatMemberStatus, ChatType
 from telegram.ext import (
     Application,
     ChatMemberHandler,
+    CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
     MessageHandler,
@@ -575,11 +576,74 @@ async def require_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> b
     return False
 
 
+ADMIN_GUIDE_PAGES = [
+    "📘 *Adminlar uchun qo‘llanma — 1/4*\n\n"
+    "*1. Aqlli AI suhbat* — oddiy savol yozing; bot mazmunini tahlil qilib javob beradi.\n"
+    "*2. Tillar* — o‘zbek lotin/kiril, rus yoki ingliz tilida yozing; bot shu tilda javob beradi.\n"
+    "*3. Suhbat xotirasi* — oldingi xabarlar mazmuni qisqa kontekst sifatida hisobga olinadi.\n"
+    "*4. Guruh suhbatiga qo‘shilish* — guruhda botni @mention qilish shart emas.\n\n"
+    "Shaxsiy chat: /start, /yordam, /til, /holat",
+    "📘 *Adminlar uchun qo‘llanma — 2/4*\n\n"
+    "*5. Moderatsiya* — xabariga reply qilib quyidagilarni ishlating:\n"
+    "/ogohlantir — ogohlantirish\n/jim — vaqtincha jim qilish\n/jimdanchiqar — jimlikni olib tashlash\n/blok — ban\n/blokdanchiqar — unban\n/hayda — guruhdan chiqarish\n\n"
+    "*6. Spam/reklama filtri* — /filtr qo‘shish yoki /filtr o‘chirish buyrug‘i bilan sozlanadi.\n"
+    "*7. Yangi a’zolar* — bot yangi qo‘shilganlarni avtomatik kutib oladi.",
+    "📘 *Adminlar uchun qo‘llanma — 3/4*\n\n"
+    "*8. Rejalashtirilgan post*\n/rejalashtir 18:30 | Bugungi muhim e’lon\n\n"
+    "*9. Majburiy obuna qo‘shish*\n/majburiy_qosh @guruh 24soat\n"
+    "Bot target guruh/kanalda administrator bo‘lishi kerak.\n\n"
+    "*10. Majburiy obunani ko‘rish/o‘chirish*\n/majburiy_royxat\n/majburiy_ochir @guruh\n\n"
+    "Vaqt tugagach, majburiy obuna avtomatik o‘chadi.\n"
+    "Foydalanuvchi tekshiruvi: /obuna",
+    "📘 *Adminlar uchun qo‘llanma — 4/4*\n\n"
+    "*11. Ball va reyting* — /ball\n"
+    "*12. Guruh o‘yini* — /oyin\n"
+    "*13. Statistika* — /statistika\n"
+    "Majburiy obuna: /obuna_statistika va /obuna_kimlar\n"
+    "Xulosa: /xulosa\nSozlamalar: /sozlamalar\n\n"
+    "*14. Ovoz va rasm/OCR* — ovozli xabar yoki rasm yuboring; bot matnni o‘qib/tahlil qiladi.\n\n"
+    "Admin buyruqlarini guruhda faqat admin ishlata oladi. Nishon foydalanuvchi xabariga reply qilish eng qulay usul.",
+]
+
+
+def admin_guide_markup(page: int) -> InlineKeyboardMarkup:
+    buttons: list[InlineKeyboardButton] = []
+    if page > 0:
+        buttons.append(InlineKeyboardButton("⬅️ Oldingi", callback_data=f"admin_guide:{page - 1}"))
+    if page < len(ADMIN_GUIDE_PAGES) - 1:
+        buttons.append(InlineKeyboardButton("Keyingi ➡️", callback_data=f"admin_guide:{page + 1}"))
+    buttons.append(InlineKeyboardButton("✖️ Yopish", callback_data="admin_guide:close"))
+    return InlineKeyboardMarkup([buttons])
+
+
+async def admin_guide_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not query or not query.data or not query.message:
+        return
+    await query.answer()
+    action = query.data.split(":", 1)[1] if ":" in query.data else "0"
+    if action == "close":
+        await query.edit_message_text("Adminlar uchun qo‘llanma yopildi. Qayta ochish uchun /start bosing.")
+        return
+    try:
+        page = max(0, min(int(action), len(ADMIN_GUIDE_PAGES) - 1))
+    except ValueError:
+        page = 0
+    await query.edit_message_text(ADMIN_GUIDE_PAGES[page], parse_mode="Markdown", reply_markup=admin_guide_markup(page))
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
+    chat = update.effective_chat
+    reply_markup = None
+    if chat and chat.type == ChatType.PRIVATE:
+        reply_markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📘 Adminlar uchun qo‘llanma", callback_data="admin_guide:0")]
+        ])
     await update.effective_message.reply_text(
         f"Salom, {user.first_name if user else 'do‘st'}! Men Dadasi botman.\n\n"
-        "Savolingizni yozing yoki /yordam buyrug‘ini bosing. Guruhda oddiy xabar yozsangiz ham suhbatga qo‘shilaman."
+        "Savolingizni yozing yoki /yordam buyrug‘ini bosing. Guruhda oddiy xabar yozsangiz ham suhbatga qo‘shilaman.",
+        reply_markup=reply_markup,
     )
 
 
@@ -1290,6 +1354,7 @@ async def process_update_once(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 telegram_app.add_handler(CommandHandler(["start"], start))
+telegram_app.add_handler(CallbackQueryHandler(admin_guide_callback, pattern=r"^admin_guide:"))
 telegram_app.add_handler(CommandHandler(["yordam", "help"], help_command))
 telegram_app.add_handler(CommandHandler(["til", "language"], language_command))
 telegram_app.add_handler(CommandHandler(["holat", "status"], status_command))
