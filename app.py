@@ -217,8 +217,25 @@ class Store:
                 );
                 """
             if self.postgres:
+                # Telegram chat/user IDs are 64-bit values; PostgreSQL INTEGER is only 32-bit.
                 schema = schema.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "BIGSERIAL PRIMARY KEY")
+                schema = schema.replace("INTEGER", "BIGINT")
             conn.executescript(schema)
+            if self.postgres:
+                # Migrate databases created by earlier releases where Telegram IDs were INTEGER.
+                id_columns = {
+                    "chats": ("chat_id",),
+                    "users": ("chat_id", "user_id"),
+                    "filters": ("chat_id",),
+                    "conversation_messages": ("chat_id",),
+                    "moderation_actions": ("chat_id", "admin_id", "target_id"),
+                    "scheduled_posts": ("chat_id", "admin_id"),
+                    "required_chats": ("chat_id", "added_by"),
+                    "subscription_checks": ("scope_chat_id", "user_id"),
+                }
+                for table, columns in id_columns.items():
+                    for column in columns:
+                        conn.execute(f"ALTER TABLE {table} ALTER COLUMN {column} TYPE BIGINT USING {column}::bigint")
             if not self.postgres:
                 columns = {row["name"] for row in conn.execute("PRAGMA table_info(required_chats)").fetchall()}
                 if "expiry_at" not in columns:
