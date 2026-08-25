@@ -18,6 +18,13 @@ import os
 import re
 import sqlite3
 import tempfile
+
+try:
+    import psycopg
+    from psycopg.rows import dict_row
+except ImportError:  # SQLite-only local development remains supported.
+    psycopg = None
+    dict_row = None
 import time
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
@@ -54,6 +61,9 @@ TRANSCRIBE_MODEL = os.environ.get("TRANSCRIBE_MODEL", "").strip() or "whisper-la
 VISION_API_URL = os.environ.get("VISION_API_URL", "").strip() or ("https://api.groq.com/openai/v1/chat/completions" if GROQ_API_KEY else "")
 VISION_API_KEY = os.environ.get("VISION_API_KEY", "").strip() or GROQ_API_KEY
 VISION_MODEL = os.environ.get("VISION_MODEL", "").strip() or os.environ.get("GROQ_VISION_MODEL", "").strip() or ("qwen/qwen3.6-27b" if GROQ_API_KEY else "")
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+POSTGRES_URL = DATABASE_URL if DATABASE_URL.startswith(("postgres://", "postgresql://")) else ""
+
 def read_positive_int(name: str, default: int) -> int:
     raw = os.environ.get(name, str(default)).strip()
     try:
@@ -70,7 +80,7 @@ REQUIRED_CHANNEL_URL = os.environ.get("REQUIRED_CHANNEL_URL", "").strip()
 BOT_DB_PATH_RAW = os.environ.get("BOT_DB_PATH", "").strip()
 DB_PATH = Path(BOT_DB_PATH_RAW or "/tmp/smart-community-bot.sqlite3").expanduser()
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-DB_STORAGE_MODE = "durable" if str(DB_PATH).startswith(("/var/data/", "/data/", "/mnt/")) else "ephemeral"
+DB_STORAGE_MODE = "postgresql" if POSTGRES_URL else ("durable" if str(DB_PATH).startswith(("/var/data/", "/data/", "/mnt/")) else "ephemeral")
 WEBHOOK_PATH = f"/telegram-webhook/{hashlib.sha256(WEBHOOK_SECRET.encode('utf-8')).hexdigest()[:24]}"
 
 app = FastAPI(title="Smart Community Bot")
@@ -82,15 +92,53 @@ if not BOT_TOKEN:
     logger.warning("BOT_TOKEN is not set. Add it in Render Environment Variables.")
 
 
+class DatabaseConnection:
+    """Small compatibility wrapper for SQLite and psycopg connections."""
+
+    def __init__(self, raw: Any, postgres: bool) -> None:
+        self.raw = raw
+        self.postgres = postgres
+
+    def __enter__(self) -> "DatabaseConnection":
+        self.raw.__enter__()
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> Any:
+        return self.raw.__exit__(exc_type, exc, traceback)
+
+    def _sql(self, sql: str) -> str:
+        return sql.replace("?", "%s") if self.postgres else sql
+
+    def execute(self, sql: str, params: tuple[Any, ...] = ()) -> Any:
+        return self.raw.execute(self._sql(sql), params)
+
+    def executemany(self, sql: str, params: list[tuple[Any, ...]]) -> Any:
+        if not self.postgres:
+            return self.raw.executemany(sql, params)
+        with self.raw.cursor() as cursor:
+            return cursor.executemany(self._sql(sql), params)
+
+    def executescript(self, sql: str) -> None:
+        if not self.postgres:
+            self.raw.executescript(sql)
+            return
+        for statement in (part.strip() for part in sql.split(";")):
+            if statement:
+                self.execute(statement)
+
+
+INTEGRITY_ERRORS = (sqlite3.IntegrityError,) + ((psycopg.IntegrityError,) if psycopg else ())
+
+
 class Store:
-    """Small SQLite persistence layer for restart-safe bot state."""
+    """Restart-safe persistence layer using PostgreSQL when DATABASE_URL is configured."""
 
     def __init__(self, path: Path) -> None:
         self.path = path
+        self.postgres = bool(POSTGRES_URL and psycopg)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as conn:
-            conn.executescript(
-                """
+            schema = """
                 CREATE TABLE IF NOT EXISTS processed_updates (
                     update_id INTEGER PRIMARY KEY,
                     processed_at REAL NOT NULL
@@ -167,20 +215,26 @@ class Store:
                     PRIMARY KEY (scope_chat_id, user_id, required_chat_id)
                 );
                 """
-            )
-            columns = {row["name"] for row in conn.execute("PRAGMA table_info(required_chats)").fetchall()}
-            if "expiry_at" not in columns:
-                conn.execute("ALTER TABLE required_chats ADD COLUMN expiry_at REAL")
-            subscription_columns = {row["name"] for row in conn.execute("PRAGMA table_info(subscription_checks)").fetchall()}
-            if "display_name" not in subscription_columns:
-                conn.execute("ALTER TABLE subscription_checks ADD COLUMN display_name TEXT NOT NULL DEFAULT ''")
-            if "username" not in subscription_columns:
-                conn.execute("ALTER TABLE subscription_checks ADD COLUMN username TEXT NOT NULL DEFAULT ''")
+            if self.postgres:
+                schema = schema.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "BIGSERIAL PRIMARY KEY")
+            conn.executescript(schema)
+            if not self.postgres:
+                columns = {row["name"] for row in conn.execute("PRAGMA table_info(required_chats)").fetchall()}
+                if "expiry_at" not in columns:
+                    conn.execute("ALTER TABLE required_chats ADD COLUMN expiry_at REAL")
+                subscription_columns = {row["name"] for row in conn.execute("PRAGMA table_info(subscription_checks)").fetchall()}
+                if "display_name" not in subscription_columns:
+                    conn.execute("ALTER TABLE subscription_checks ADD COLUMN display_name TEXT NOT NULL DEFAULT ''")
+                if "username" not in subscription_columns:
+                    conn.execute("ALTER TABLE subscription_checks ADD COLUMN username TEXT NOT NULL DEFAULT ''")
 
-    def connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.path, timeout=10)
-        conn.row_factory = sqlite3.Row
-        return conn
+    def connect(self) -> DatabaseConnection:
+        if self.postgres:
+            raw = psycopg.connect(POSTGRES_URL, row_factory=dict_row, connect_timeout=10)
+            return DatabaseConnection(raw, True)
+        raw = sqlite3.connect(self.path, timeout=10)
+        raw.row_factory = sqlite3.Row
+        return DatabaseConnection(raw, False)
 
     def mark_update_once(self, update_id: int) -> bool:
         with self.connect() as conn:
@@ -194,7 +248,7 @@ class Store:
                     (time.time() - 7 * 86400,),
                 )
                 return True
-            except sqlite3.IntegrityError:
+            except INTEGRITY_ERRORS:
                 return False
 
     def ensure_chat(self, chat_id: int, title: str = "") -> None:
@@ -340,7 +394,7 @@ class Store:
 
     def add_filter(self, chat_id: int, phrase: str) -> None:
         with self.connect() as conn:
-            conn.execute("INSERT OR IGNORE INTO filters(chat_id,phrase) VALUES(?,?)", (chat_id, phrase.lower().strip()))
+            conn.execute("INSERT INTO filters(chat_id,phrase) VALUES(?,?) ON CONFLICT(chat_id,phrase) DO NOTHING", (chat_id, phrase.lower().strip()))
 
     def remove_filter(self, chat_id: int, phrase: str) -> None:
         with self.connect() as conn:
