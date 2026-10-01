@@ -1,4 +1,4 @@
-"""
+hf"""
 Smart Community Bot — production-minded Render test build.
 
 This module keeps the service self-contained for the first deployment: SQLite stores
@@ -439,7 +439,7 @@ class Store:
             ai_replies = conn.execute("SELECT COUNT(*) AS total FROM conversation_messages WHERE role='assistant'").fetchone()
             warnings = conn.execute("SELECT COALESCE(SUM(warnings),0) AS total FROM users").fetchone()
             announcements = conn.execute("SELECT COUNT(*) AS total FROM scheduled_posts WHERE enabled=1").fetchone()
-            news = conn.execute("SELECT COUNT(*) AS total FROM conversation_messages WHERE content LIKE '%yangilik%' OR content LIKE '%новост%' OR content LIKE '%news%'").fetchone()
+            news = conn.execute("SELECT COUNT(*) AS total FROM conversation_messages WHERE content LIKE '%%yangilik%%' OR content LIKE '%%новост%%' OR content LIKE '%%news%%'").fetchone()
         return {
             "active_groups": len(groups),
             "total_groups": len(groups),
