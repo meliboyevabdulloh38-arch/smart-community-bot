@@ -1,4 +1,4 @@
-hf"""
+"""
 Smart Community Bot — production-minded Render test build.
 
 This module keeps the service self-contained for the first deployment: SQLite stores
